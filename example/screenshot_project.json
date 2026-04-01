@@ -1,0 +1,56 @@
+{
+  "app_name": "Dhi",
+  "app_description": "an AI-powered personal finance app for Indian users. It helps track net worth, set goals, plan retirement, analyze cashflow, manage insurance, and import bank statements.",
+  "screens": [
+    {"key": "01_home",       "label": "Home"},
+    {"key": "02_networth",   "label": "Net Worth"},
+    {"key": "03_goals",      "label": "Goals"},
+    {"key": "04_retirement", "label": "Retirement"},
+    {"key": "05_cashflow",   "label": "Cashflow"},
+    {"key": "06_protection", "label": "Protection"},
+    {"key": "07_import",     "label": "Import"}
+  ],
+  "gradients": {
+    "01_home":       ["#2563EB", "#1E40AF"],
+    "02_networth":   ["#7C3AED", "#5B21B6"],
+    "03_goals":      ["#0D9488", "#0F766E"],
+    "04_retirement": ["#3B82F6", "#7C3AED"],
+    "05_cashflow":   ["#10B981", "#059669"],
+    "06_protection": ["#14B8A6", "#0D9488"],
+    "07_import":     ["#3B82F6", "#2563EB"]
+  },
+  "captions": {
+    "01_home": {
+      "headline": "Your AI Finance Companion",
+      "subheadline": "Track, plan, and grow your wealth"
+    },
+    "02_networth": {
+      "headline": "See Your Complete Financial Picture",
+      "subheadline": "Assets, liabilities, and net worth at a glance"
+    },
+    "03_goals": {
+      "headline": "Track & Achieve Your Financial Goals",
+      "subheadline": "From dream vacations to emergency funds"
+    },
+    "04_retirement": {
+      "headline": "Plan Your Retirement with Confidence",
+      "subheadline": "AI-powered projections tailored for India"
+    },
+    "05_cashflow": {
+      "headline": "Know Where Your Money Goes",
+      "subheadline": "Income, expenses, and savings clarity"
+    },
+    "06_protection": {
+      "headline": "Stay Protected, Stay Secure",
+      "subheadline": "Insurance coverage at your fingertips"
+    },
+    "07_import": {
+      "headline": "Import Statements in Seconds",
+      "subheadline": "Auto-categorize with AI precision"
+    }
+  },
+  "capture": {
+    "ipad_simulator": "iPad Pro 13-inch (M5)",
+    "iphone_simulator": "iPhone 17 Pro Max"
+  }
+}

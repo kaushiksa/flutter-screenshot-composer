@@ -1,0 +1,23 @@
+# Screenshots (user-generated)
+screenshots/
+screenshot_config.json
+screenshot_captions.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
