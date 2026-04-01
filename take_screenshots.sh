@@ -38,7 +38,8 @@ else
   APP_NAME="App"
 fi
 
-OUTPUT_DIR="$PROJECT_DIR/screenshots"
+# SCREENSHOTS_DIR is set by the central tool; fall back to project dir
+OUTPUT_DIR="${SCREENSHOTS_DIR:-$PROJECT_DIR/screenshots}"
 IPAD_DIR="$OUTPUT_DIR/iPad Pro 13-inch"
 IPHONE_DIR="$OUTPUT_DIR/iPhone 6.7-inch"
 BACKUP_DIR="$OUTPUT_DIR/logical"

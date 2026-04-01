@@ -186,7 +186,7 @@ def load_project_config() -> dict:
 
 def discover_screens() -> list[tuple[str, str]]:
     """Auto-detect screens from PNG files in screenshots/ subfolders."""
-    screenshots_dir = PROJECT_DIR / "screenshots"
+    screenshots_dir = PROJECT_DATA_DIR / "screenshots"
     if not screenshots_dir.exists():
         return []
     found = set()
@@ -468,7 +468,7 @@ def compose_preview(screen_key, config, device=None):
         candidates = list(devices.items())
 
     for device_name, device_cfg in candidates:
-        raw_path = PROJECT_DIR / "screenshots" / device_name / f"{screen_key}.png"
+        raw_path = PROJECT_DATA_DIR / "screenshots" / device_name / f"{screen_key}.png"
         if raw_path.exists():
             img = compose_screenshot(raw_path, screen_key, device_cfg, captions, gradients)
             # Downscale for preview (max 600px wide)
@@ -501,8 +501,8 @@ def run_composition(config: dict, excluded: dict | None = None):
     results = []
 
     for device_name, device_cfg in devices.items():
-        input_dir = PROJECT_DIR / "screenshots" / device_name
-        output_dir = PROJECT_DIR / "screenshots" / "composed" / device_name
+        input_dir = PROJECT_DATA_DIR / "screenshots" / device_name
+        output_dir = PROJECT_DATA_DIR / "screenshots" / "composed" / device_name
         output_dir.mkdir(parents=True, exist_ok=True)
         device_excluded = excluded.get(device_name, [])
 
@@ -528,7 +528,7 @@ def run_composition(config: dict, excluded: dict | None = None):
     # Auto-generate scaled App Store sizes from iPhone source
     iphone_src = None
     for name in devices:
-        candidate = PROJECT_DIR / "screenshots" / "composed" / name
+        candidate = PROJECT_DATA_DIR / "screenshots" / "composed" / name
         if "iPhone" in name and candidate.exists():
             iphone_src = candidate
             break
@@ -539,7 +539,7 @@ def run_composition(config: dict, excluded: dict | None = None):
             "iPhone 5.5-inch": (1242, 2208),
         }
         for size_name, (tw, th) in SCALED_SIZES.items():
-            out_dir = PROJECT_DIR / "screenshots" / "composed" / size_name
+            out_dir = PROJECT_DATA_DIR / "screenshots" / "composed" / size_name
             out_dir.mkdir(parents=True, exist_ok=True)
             for src in sorted(iphone_src.glob("*.png")):
                 img = Image.open(src)
@@ -550,7 +550,7 @@ def run_composition(config: dict, excluded: dict | None = None):
 
     # Auto-generate Play Store phone screenshots (1080x1920, 9:16)
     if iphone_src and iphone_src.exists():
-        play_dir = PROJECT_DIR / "screenshots" / "composed" / "Phone"
+        play_dir = PROJECT_DATA_DIR / "screenshots" / "composed" / "Phone"
         play_dir.mkdir(parents=True, exist_ok=True)
         play_w, play_h = 1080, 1920
         for src in sorted(iphone_src.glob("*.png")):
@@ -583,8 +583,8 @@ def run_composition_streaming(config: dict, send_progress=None):
     results = []
 
     for device_name, device_cfg in devices.items():
-        input_dir = PROJECT_DIR / "screenshots" / device_name
-        output_dir = PROJECT_DIR / "screenshots" / "composed" / device_name
+        input_dir = PROJECT_DATA_DIR / "screenshots" / device_name
+        output_dir = PROJECT_DATA_DIR / "screenshots" / "composed" / device_name
         output_dir.mkdir(parents=True, exist_ok=True)
 
         if not input_dir.exists():
@@ -603,7 +603,7 @@ def run_composition_streaming(config: dict, send_progress=None):
     # Auto-generate scaled App Store sizes
     iphone_src = None
     for name in devices:
-        candidate = PROJECT_DIR / "screenshots" / "composed" / name
+        candidate = PROJECT_DATA_DIR / "screenshots" / "composed" / name
         if "iPhone" in name and candidate.exists():
             iphone_src = candidate
             break
@@ -616,7 +616,7 @@ def run_composition_streaming(config: dict, send_progress=None):
         for size_name, (tw, th) in SCALED_SIZES.items():
             if send_progress:
                 send_progress({"type": "progress", "message": f"Scaling {size_name} ({tw}x{th})..."})
-            out_dir = PROJECT_DIR / "screenshots" / "composed" / size_name
+            out_dir = PROJECT_DATA_DIR / "screenshots" / "composed" / size_name
             out_dir.mkdir(parents=True, exist_ok=True)
             for src in sorted(iphone_src.glob("*.png")):
                 img = Image.open(src)
@@ -629,7 +629,7 @@ def run_composition_streaming(config: dict, send_progress=None):
         play_w, play_h = 1080, 1920
         if send_progress:
             send_progress({"type": "progress", "message": f"Scaling Play Store phone ({play_w}x{play_h})..."})
-        play_dir = PROJECT_DIR / "screenshots" / "composed" / "Phone"
+        play_dir = PROJECT_DATA_DIR / "screenshots" / "composed" / "Phone"
         play_dir.mkdir(parents=True, exist_ok=True)
         for src in sorted(iphone_src.glob("*.png")):
             img = Image.open(src)
@@ -1351,7 +1351,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
 
         result = {}
         for device_name in (self.config.get("devices") or DEFAULT_DEVICE_CONFIGS):
-            input_dir = PROJECT_DIR / "screenshots" / device_name
+            input_dir = PROJECT_DATA_DIR / "screenshots" / device_name
             available = []
             if input_dir.exists():
                 for png in sorted(input_dir.glob("*.png")):
@@ -1523,6 +1523,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
 
             env = os.environ.copy()
             env["PROJECT_DIR"] = str(PROJECT_DIR)
+            env["SCREENSHOTS_DIR"] = str(PROJECT_DATA_DIR / "screenshots")
             proc = subprocess.Popen(
                 ["bash", str(capture_script), target],
                 cwd=str(PROJECT_DIR),
@@ -1613,12 +1614,12 @@ class PreviewHandler(BaseHTTPRequestHandler):
             screen_key = req["screen"]
             deleted = []
             # Delete raw screenshot
-            raw_path = PROJECT_DIR / "screenshots" / device / f"{screen_key}.png"
+            raw_path = PROJECT_DATA_DIR / "screenshots" / device / f"{screen_key}.png"
             if raw_path.exists():
                 raw_path.unlink()
                 deleted.append(str(raw_path))
             # Delete composed screenshot
-            composed_path = PROJECT_DIR / "screenshots" / "composed" / device / f"{screen_key}.png"
+            composed_path = PROJECT_DATA_DIR / "screenshots" / "composed" / device / f"{screen_key}.png"
             if composed_path.exists():
                 composed_path.unlink()
                 deleted.append(str(composed_path))
