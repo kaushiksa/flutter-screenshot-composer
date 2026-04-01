@@ -20,11 +20,14 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR"
+
+# Use PROJECT_DIR if set (when run from the central tool), otherwise use SCRIPT_DIR
+PROJECT_DIR="${PROJECT_DIR:-$SCRIPT_DIR}"
+cd "$PROJECT_DIR"
 
 # ── Configuration ───────────────────────────────────────────────────────────
 # Read device names from screenshot_project.json if available
-PROJECT_JSON="$SCRIPT_DIR/screenshot_project.json"
+PROJECT_JSON="$PROJECT_DIR/screenshot_project.json"
 if [ -f "$PROJECT_JSON" ]; then
   IPAD_NAME=$(python3 -c "import json; d=json.load(open('$PROJECT_JSON')); print(d.get('capture',{}).get('ipad_simulator','iPad Pro 13-inch (M5)'))" 2>/dev/null || echo "iPad Pro 13-inch (M5)")
   IPHONE_NAME=$(python3 -c "import json; d=json.load(open('$PROJECT_JSON')); print(d.get('capture',{}).get('iphone_simulator','iPhone 17 Pro Max'))" 2>/dev/null || echo "iPhone 17 Pro Max")
@@ -35,7 +38,7 @@ else
   APP_NAME="App"
 fi
 
-OUTPUT_DIR="$SCRIPT_DIR/screenshots"
+OUTPUT_DIR="$PROJECT_DIR/screenshots"
 IPAD_DIR="$OUTPUT_DIR/iPad Pro 13-inch"
 IPHONE_DIR="$OUTPUT_DIR/iPhone 6.7-inch"
 BACKUP_DIR="$OUTPUT_DIR/logical"

@@ -1,4 +1,6 @@
-# Screenshots (user-generated)
+# User data (per-machine)
+projects.json
+project_data/
 screenshots/
 screenshot_config.json
 screenshot_captions.json

@@ -40,10 +40,101 @@ except ImportError:
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
 FONT_PATH = SCRIPT_DIR / "fonts" / "Inter.ttc"
+PROJECTS_FILE = SCRIPT_DIR / "projects.json"
+PREVIEW_PORT = 8234
+
+# Active project state — set by switch_project()
+PROJECT_DIR = SCRIPT_DIR  # fallback: tool dir itself
+PROJECT_DATA_DIR = SCRIPT_DIR  # where config/captions are stored
 CAPTIONS_FILE = SCRIPT_DIR / "screenshot_captions.json"
 CONFIG_FILE = SCRIPT_DIR / "screenshot_config.json"
 PROJECT_FILE = SCRIPT_DIR / "screenshot_project.json"
-PREVIEW_PORT = 8234
+
+
+# =============================================================================
+# Multi-Project Management
+# =============================================================================
+
+def load_projects() -> dict:
+    """Load projects registry from projects.json."""
+    if PROJECTS_FILE.exists():
+        return json.loads(PROJECTS_FILE.read_text())
+    return {"projects": [], "active": None}
+
+
+def save_projects(data: dict):
+    PROJECTS_FILE.write_text(json.dumps(data, indent=2))
+
+
+def add_project(name: str, path: str) -> dict:
+    """Register a new Flutter project."""
+    data = load_projects()
+    # Check for duplicates
+    for p in data["projects"]:
+        if p["name"] == name:
+            return {"error": f"Project '{name}' already exists"}
+    project_path = Path(path).resolve()
+    if not project_path.exists():
+        return {"error": f"Path does not exist: {path}"}
+    data["projects"].append({"name": name, "path": str(project_path)})
+    data["active"] = name
+    save_projects(data)
+    # Create project data dir for config storage
+    project_data = SCRIPT_DIR / "project_data" / name
+    project_data.mkdir(parents=True, exist_ok=True)
+    # Copy screenshot_driver.dart if the project doesn't have it
+    driver_src = SCRIPT_DIR / "test_driver" / "screenshot_driver.dart"
+    driver_dst = project_path / "test_driver" / "screenshot_driver.dart"
+    if driver_src.exists() and not driver_dst.exists():
+        driver_dst.parent.mkdir(parents=True, exist_ok=True)
+        driver_dst.write_text(driver_src.read_text())
+        print(f"  Copied screenshot_driver.dart to {driver_dst}")
+    # Copy template if no screenshot_test.dart exists
+    template_src = SCRIPT_DIR / "integration_test" / "screenshot_test_template.dart"
+    test_dst = project_path / "integration_test" / "screenshot_test_template.dart"
+    if template_src.exists() and not test_dst.exists():
+        test_dst.parent.mkdir(parents=True, exist_ok=True)
+        test_dst.write_text(template_src.read_text())
+        print(f"  Copied screenshot_test_template.dart to {test_dst}")
+    switch_project(name)
+    return {"success": True, "name": name, "path": str(project_path)}
+
+
+def remove_project(name: str) -> dict:
+    data = load_projects()
+    data["projects"] = [p for p in data["projects"] if p["name"] != name]
+    if data["active"] == name:
+        data["active"] = data["projects"][0]["name"] if data["projects"] else None
+    save_projects(data)
+    return {"success": True}
+
+
+def switch_project(name: str) -> bool:
+    """Switch to a registered project, updating all global paths."""
+    global PROJECT_DIR, PROJECT_DATA_DIR, CAPTIONS_FILE, CONFIG_FILE, PROJECT_FILE
+    global PROJECT_CONFIG, SCREENS, DEFAULT_GRADIENTS, DEFAULT_CAPTIONS
+
+    data = load_projects()
+    project = next((p for p in data["projects"] if p["name"] == name), None)
+    if not project:
+        return False
+
+    PROJECT_DIR = Path(project["path"]).resolve()
+    PROJECT_DATA_DIR = SCRIPT_DIR / "project_data" / name
+    PROJECT_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Config files stored centrally per-project
+    CAPTIONS_FILE = PROJECT_DATA_DIR / "screenshot_captions.json"
+    CONFIG_FILE = PROJECT_DATA_DIR / "screenshot_config.json"
+    # Project file lives in the Flutter project itself
+    PROJECT_FILE = PROJECT_DIR / "screenshot_project.json"
+
+    data["active"] = name
+    save_projects(data)
+
+    init_project()
+    print(f"[PROJECT] Switched to: {name} ({PROJECT_DIR})")
+    return True
 
 # Default device configs — used when no project config specifies devices
 DEFAULT_DEVICE_CONFIGS = {
@@ -95,7 +186,7 @@ def load_project_config() -> dict:
 
 def discover_screens() -> list[tuple[str, str]]:
     """Auto-detect screens from PNG files in screenshots/ subfolders."""
-    screenshots_dir = SCRIPT_DIR / "screenshots"
+    screenshots_dir = PROJECT_DIR / "screenshots"
     if not screenshots_dir.exists():
         return []
     found = set()
@@ -231,7 +322,9 @@ def load_openai_key() -> str | None:
     key = os.environ.get("OPENAI_API_KEY")
     if key:
         return key
-    env_path = SCRIPT_DIR.parent / "backend" / ".env"
+    env_path = PROJECT_DIR / ".env"
+    if not env_path.exists():
+        env_path = PROJECT_DIR.parent / "backend" / ".env"
     if env_path.exists():
         for line in env_path.read_text().splitlines():
             stripped = line.strip()
@@ -375,7 +468,7 @@ def compose_preview(screen_key, config, device=None):
         candidates = list(devices.items())
 
     for device_name, device_cfg in candidates:
-        raw_path = SCRIPT_DIR / "screenshots" / device_name / f"{screen_key}.png"
+        raw_path = PROJECT_DIR / "screenshots" / device_name / f"{screen_key}.png"
         if raw_path.exists():
             img = compose_screenshot(raw_path, screen_key, device_cfg, captions, gradients)
             # Downscale for preview (max 600px wide)
@@ -408,8 +501,8 @@ def run_composition(config: dict, excluded: dict | None = None):
     results = []
 
     for device_name, device_cfg in devices.items():
-        input_dir = SCRIPT_DIR / "screenshots" / device_name
-        output_dir = SCRIPT_DIR / "screenshots" / "composed" / device_name
+        input_dir = PROJECT_DIR / "screenshots" / device_name
+        output_dir = PROJECT_DIR / "screenshots" / "composed" / device_name
         output_dir.mkdir(parents=True, exist_ok=True)
         device_excluded = excluded.get(device_name, [])
 
@@ -435,7 +528,7 @@ def run_composition(config: dict, excluded: dict | None = None):
     # Auto-generate scaled App Store sizes from iPhone source
     iphone_src = None
     for name in devices:
-        candidate = SCRIPT_DIR / "screenshots" / "composed" / name
+        candidate = PROJECT_DIR / "screenshots" / "composed" / name
         if "iPhone" in name and candidate.exists():
             iphone_src = candidate
             break
@@ -446,7 +539,7 @@ def run_composition(config: dict, excluded: dict | None = None):
             "iPhone 5.5-inch": (1242, 2208),
         }
         for size_name, (tw, th) in SCALED_SIZES.items():
-            out_dir = SCRIPT_DIR / "screenshots" / "composed" / size_name
+            out_dir = PROJECT_DIR / "screenshots" / "composed" / size_name
             out_dir.mkdir(parents=True, exist_ok=True)
             for src in sorted(iphone_src.glob("*.png")):
                 img = Image.open(src)
@@ -457,7 +550,7 @@ def run_composition(config: dict, excluded: dict | None = None):
 
     # Auto-generate Play Store phone screenshots (1080x1920, 9:16)
     if iphone_src and iphone_src.exists():
-        play_dir = SCRIPT_DIR / "screenshots" / "composed" / "Phone"
+        play_dir = PROJECT_DIR / "screenshots" / "composed" / "Phone"
         play_dir.mkdir(parents=True, exist_ok=True)
         play_w, play_h = 1080, 1920
         for src in sorted(iphone_src.glob("*.png")):
@@ -490,8 +583,8 @@ def run_composition_streaming(config: dict, send_progress=None):
     results = []
 
     for device_name, device_cfg in devices.items():
-        input_dir = SCRIPT_DIR / "screenshots" / device_name
-        output_dir = SCRIPT_DIR / "screenshots" / "composed" / device_name
+        input_dir = PROJECT_DIR / "screenshots" / device_name
+        output_dir = PROJECT_DIR / "screenshots" / "composed" / device_name
         output_dir.mkdir(parents=True, exist_ok=True)
 
         if not input_dir.exists():
@@ -510,7 +603,7 @@ def run_composition_streaming(config: dict, send_progress=None):
     # Auto-generate scaled App Store sizes
     iphone_src = None
     for name in devices:
-        candidate = SCRIPT_DIR / "screenshots" / "composed" / name
+        candidate = PROJECT_DIR / "screenshots" / "composed" / name
         if "iPhone" in name and candidate.exists():
             iphone_src = candidate
             break
@@ -523,7 +616,7 @@ def run_composition_streaming(config: dict, send_progress=None):
         for size_name, (tw, th) in SCALED_SIZES.items():
             if send_progress:
                 send_progress({"type": "progress", "message": f"Scaling {size_name} ({tw}x{th})..."})
-            out_dir = SCRIPT_DIR / "screenshots" / "composed" / size_name
+            out_dir = PROJECT_DIR / "screenshots" / "composed" / size_name
             out_dir.mkdir(parents=True, exist_ok=True)
             for src in sorted(iphone_src.glob("*.png")):
                 img = Image.open(src)
@@ -536,7 +629,7 @@ def run_composition_streaming(config: dict, send_progress=None):
         play_w, play_h = 1080, 1920
         if send_progress:
             send_progress({"type": "progress", "message": f"Scaling Play Store phone ({play_w}x{play_h})..."})
-        play_dir = SCRIPT_DIR / "screenshots" / "composed" / "Phone"
+        play_dir = PROJECT_DIR / "screenshots" / "composed" / "Phone"
         play_dir.mkdir(parents=True, exist_ok=True)
         for src in sorted(iphone_src.glob("*.png")):
             img = Image.open(src)
@@ -568,12 +661,17 @@ PREVIEW_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>__APP_NAME__ — Screenshot Composer</title>
+<title>Screenshot Composer</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; background: #0f0f0f; color: #e5e5e5; }
   .header { padding: 14px 24px; background: #1a1a1a; border-bottom: 1px solid #333; display: flex; align-items: center; justify-content: space-between; }
   .header h1 { font-size: 16px; font-weight: 600; }
+  .header .project-bar { display: flex; align-items: center; gap: 8px; }
+  .header .project-bar select { padding: 6px 10px; border-radius: 6px; border: 1px solid #444; background: #262626; color: #e5e5e5; font-size: 12px; cursor: pointer; min-width: 140px; }
+  .header .project-bar select:focus { border-color: #2563EB; outline: none; }
+  .header .project-bar .proj-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid #444; background: #262626; color: #aaa; font-size: 14px; cursor: pointer; line-height: 1; }
+  .header .project-bar .proj-btn:hover { background: #333; color: #fff; }
   .header .actions { display: flex; gap: 8px; }
   .btn { padding: 8px 16px; border: none; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
   .btn-secondary { background: #333; color: #e5e5e5; }
@@ -619,7 +717,14 @@ PREVIEW_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <div class="header">
-  <h1>__APP_NAME__ — Screenshot Composer</h1>
+  <div style="display:flex; align-items:center; gap: 16px;">
+    <h1>Screenshot Composer</h1>
+    <div class="project-bar">
+      <select id="projectSelect" onchange="switchProject(this.value)"></select>
+      <button class="proj-btn" onclick="addProject()" title="Add project">+</button>
+      <button class="proj-btn" onclick="removeProject()" title="Remove project">&times;</button>
+    </div>
+  </div>
   <div class="actions">
     <button class="btn btn-red" onclick="resetDefaults()">Reset</button>
     <button class="btn btn-secondary" onclick="saveConfig()">Save Config</button>
@@ -721,7 +826,71 @@ let availableScreens = {};
 let SCREENS_LIST = __SCREENS_JSON__;
 const DEFAULT_CONFIG = __DEFAULT_CONFIG_JSON__;
 
+let projectsList = [];
+let activeProject = null;
+
+async function loadProjects() {
+  const resp = await fetch('/api/projects');
+  const data = await resp.json();
+  projectsList = data.projects || [];
+  activeProject = data.active;
+  const sel = document.getElementById('projectSelect');
+  sel.innerHTML = '';
+  if (projectsList.length === 0) {
+    sel.innerHTML = '<option value="">No projects — click + to add</option>';
+    return false;
+  }
+  for (const p of projectsList) {
+    const opt = document.createElement('option');
+    opt.value = p.name;
+    opt.textContent = p.name;
+    if (p.name === activeProject) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  return true;
+}
+
+async function switchProject(name) {
+  if (!name) return;
+  setStatus('Switching to ' + name + '...', 'working');
+  await fetch('/api/switch-project', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ name: name }),
+  });
+  location.reload();
+}
+
+async function addProject() {
+  const name = prompt('Project name (e.g. "Dhi", "FurFam"):');
+  if (!name) return;
+  const path = prompt('Path to Flutter project directory:');
+  if (!path) return;
+  setStatus('Adding project...', 'working');
+  const resp = await fetch('/api/add-project', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ name: name, path: path }),
+  });
+  const result = await resp.json();
+  if (result.error) { setStatus('Error: ' + result.error, 'error'); return; }
+  location.reload();
+}
+
+async function removeProject() {
+  if (!activeProject) return;
+  if (!confirm('Remove project "' + activeProject + '" from the list?\\n\\n(This only removes it from the composer — no files are deleted.)')) return;
+  await fetch('/api/remove-project', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ name: activeProject }),
+  });
+  location.reload();
+}
+
 async function init() {
+  const hasProjects = await loadProjects();
+  if (!hasProjects) { setStatus('Add a project to get started — click the + button.', ''); return; }
   const resp = await fetch('/api/config');
   config = await resp.json();
   // Check which screens have raw screenshots
@@ -1122,6 +1291,8 @@ class PreviewHandler(BaseHTTPRequestHandler):
             self._serve_json(self.config)
         elif path == "/api/available":
             self._serve_available()
+        elif path == "/api/projects":
+            self._serve_json(load_projects())
         else:
             self.send_error(404)
 
@@ -1139,6 +1310,12 @@ class PreviewHandler(BaseHTTPRequestHandler):
             self._handle_save_config()
         elif path == "/api/delete-screen":
             self._handle_delete_screen()
+        elif path == "/api/add-project":
+            self._handle_add_project()
+        elif path == "/api/remove-project":
+            self._handle_remove_project()
+        elif path == "/api/switch-project":
+            self._handle_switch_project()
         else:
             self.send_error(404)
 
@@ -1148,10 +1325,8 @@ class PreviewHandler(BaseHTTPRequestHandler):
             "devices": DEFAULT_DEVICE_CONFIGS,
             "gradients": {k: list(v) for k, v in DEFAULT_GRADIENTS.items()},
         })
-        app_name = PROJECT_CONFIG.get("app_name", "App")
         html = PREVIEW_HTML.replace("__SCREENS_JSON__", screens_json)
         html = html.replace("__DEFAULT_CONFIG_JSON__", default_config_json)
-        html = html.replace("__APP_NAME__", app_name)
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.end_headers()
@@ -1176,7 +1351,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
 
         result = {}
         for device_name in (self.config.get("devices") or DEFAULT_DEVICE_CONFIGS):
-            input_dir = SCRIPT_DIR / "screenshots" / device_name
+            input_dir = PROJECT_DIR / "screenshots" / device_name
             available = []
             if input_dir.exists():
                 for png in sorted(input_dir.glob("*.png")):
@@ -1277,7 +1452,9 @@ class PreviewHandler(BaseHTTPRequestHandler):
             self._send_sse({"type": "progress", "message": f"Generated {len(results)} composed screenshots"})
 
             # Step 2: Upload via fastlane
-            upload_script = SCRIPT_DIR / "upload_screenshots.sh"
+            upload_script = PROJECT_DIR / "upload_screenshots.sh"
+            if not upload_script.exists():
+                upload_script = SCRIPT_DIR / "upload_screenshots.sh"
             if not upload_script.exists():
                 self._send_sse({"type": "error", "message": "upload_screenshots.sh not found"})
                 return
@@ -1296,7 +1473,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
             self._send_sse({"type": "progress", "message": f"Uploading to {target_label}..."})
             proc = subprocess.Popen(
                 cmd,
-                cwd=str(SCRIPT_DIR),
+                cwd=str(PROJECT_DIR),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -1332,18 +1509,24 @@ class PreviewHandler(BaseHTTPRequestHandler):
             if target not in ("all", "ipad", "iphone"):
                 target = "all"
 
-            capture_script = SCRIPT_DIR / "take_screenshots.sh"
+            # Look for take_screenshots.sh in project dir first, then tool dir
+            capture_script = PROJECT_DIR / "take_screenshots.sh"
+            if not capture_script.exists():
+                capture_script = SCRIPT_DIR / "take_screenshots.sh"
             if not capture_script.exists():
                 self._start_sse()
                 self._send_sse({"type": "error", "message": "take_screenshots.sh not found"})
                 return
 
             self._start_sse()
-            self._send_sse({"type": "progress", "message": f"Starting capture ({target})..."})
+            self._send_sse({"type": "progress", "message": f"Starting capture ({target}) in {PROJECT_DIR.name}..."})
 
+            env = os.environ.copy()
+            env["PROJECT_DIR"] = str(PROJECT_DIR)
             proc = subprocess.Popen(
                 ["bash", str(capture_script), target],
-                cwd=str(SCRIPT_DIR),
+                cwd=str(PROJECT_DIR),
+                env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -1368,6 +1551,42 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 self._send_sse({"type": "error", "message": str(e)})
             except Exception:
                 pass
+
+    def _handle_add_project(self):
+        body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        try:
+            req = json.loads(body)
+            result = add_project(req["name"], req["path"])
+            if "error" not in result:
+                self.config.update(load_config())
+            self._serve_json(result)
+        except Exception as e:
+            self._serve_json({"error": str(e)})
+
+    def _handle_remove_project(self):
+        body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        try:
+            req = json.loads(body)
+            result = remove_project(req["name"])
+            # Switch to new active project if any
+            data = load_projects()
+            if data["active"]:
+                switch_project(data["active"])
+                self.config.update(load_config())
+            self._serve_json(result)
+        except Exception as e:
+            self._serve_json({"error": str(e)})
+
+    def _handle_switch_project(self):
+        body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        try:
+            req = json.loads(body)
+            success = switch_project(req["name"])
+            if success:
+                self.config.update(load_config())
+            self._serve_json({"success": success})
+        except Exception as e:
+            self._serve_json({"error": str(e)})
 
     def _handle_save_config(self):
         """Save current config to screenshot_config.json without generating."""
@@ -1394,12 +1613,12 @@ class PreviewHandler(BaseHTTPRequestHandler):
             screen_key = req["screen"]
             deleted = []
             # Delete raw screenshot
-            raw_path = SCRIPT_DIR / "screenshots" / device / f"{screen_key}.png"
+            raw_path = PROJECT_DIR / "screenshots" / device / f"{screen_key}.png"
             if raw_path.exists():
                 raw_path.unlink()
                 deleted.append(str(raw_path))
             # Delete composed screenshot
-            composed_path = SCRIPT_DIR / "screenshots" / "composed" / device / f"{screen_key}.png"
+            composed_path = PROJECT_DIR / "screenshots" / "composed" / device / f"{screen_key}.png"
             if composed_path.exists():
                 composed_path.unlink()
                 deleted.append(str(composed_path))
@@ -1437,9 +1656,32 @@ def main():
     parser.add_argument("--no-ai", action="store_true", help="Use only hardcoded fallback captions")
     parser.add_argument("--iphone-only", action="store_true", help="Process iPhone only")
     parser.add_argument("--ipad-only", action="store_true", help="Process iPad only")
+    parser.add_argument("--project", type=str, help="Switch to named project before running")
+    parser.add_argument("--add-project", nargs=2, metavar=("NAME", "PATH"), help="Register a new project")
     args = parser.parse_args()
 
-    init_project()
+    # Handle --add-project
+    if args.add_project:
+        name, path = args.add_project
+        result = add_project(name, path)
+        if "error" in result:
+            print(f"Error: {result['error']}")
+        else:
+            print(f"Added project '{name}' at {path}")
+        return
+
+    # Load active project from projects.json, or fall back to local mode
+    data = load_projects()
+    if args.project:
+        if not switch_project(args.project):
+            print(f"Error: project '{args.project}' not found")
+            return
+    elif data.get("active"):
+        switch_project(data["active"])
+    else:
+        # No projects registered — run in local/legacy mode
+        init_project()
+
     app_name = PROJECT_CONFIG.get("app_name", "Screenshot Composer")
 
     config = load_config()
@@ -1462,6 +1704,7 @@ def main():
     if args.no_preview:
         print(f"{app_name} — Compose App Store Screenshots")
         print("=" * 40)
+        print(f"  Project dir: {PROJECT_DIR}")
         captions = config.get("captions", DEFAULT_CAPTIONS)
         print("\nCaptions:")
         for key, _ in SCREENS:
@@ -1470,17 +1713,20 @@ def main():
         save_config(config)
         print()
         results = run_composition(config)
-        print(f"\nDone! {len(results)} composed screenshots in screenshots/composed/")
-        print("Next: ./upload_screenshots.sh")
+        print(f"\nDone! {len(results)} composed screenshots in {PROJECT_DIR}/screenshots/composed/")
         return
 
     # Default: preview UI
-    print(f"{app_name} — Screenshot Composer")
+    print("Screenshot Composer")
     print("=" * 40)
+    if data.get("active"):
+        print(f"  Active project: {data['active']} ({PROJECT_DIR})")
+    if data.get("projects"):
+        print(f"  Registered: {', '.join(p['name'] for p in data['projects'])}")
     if SCREENS:
         print(f"  Screens: {len(SCREENS)} ({', '.join(k for k, _ in SCREENS)})")
     else:
-        print("  No screens found yet. Drop PNGs in screenshots/<device>/ or use Capture.")
+        print("  No screens found. Add a project and drop PNGs, or use Capture.")
     save_config(config)
     run_preview_server(config)
 
