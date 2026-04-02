@@ -82,16 +82,16 @@ def add_project(name: str, path: str) -> dict:
     # Create project data dir for config storage
     project_data = SCRIPT_DIR / "project_data" / name
     project_data.mkdir(parents=True, exist_ok=True)
-    # Copy screenshot_driver.dart if the project doesn't have it
+    # Copy screenshot_driver.dart into project's screenshots/ folder
     driver_src = SCRIPT_DIR / "test_driver" / "screenshot_driver.dart"
-    driver_dst = project_path / "test_driver" / "screenshot_driver.dart"
+    driver_dst = project_path / "screenshots" / "screenshot_driver.dart"
     if driver_src.exists() and not driver_dst.exists():
         driver_dst.parent.mkdir(parents=True, exist_ok=True)
         driver_dst.write_text(driver_src.read_text())
         print(f"  Copied screenshot_driver.dart to {driver_dst}")
     # Copy template if no screenshot_test.dart exists
     template_src = SCRIPT_DIR / "integration_test" / "screenshot_test_template.dart"
-    test_dst = project_path / "integration_test" / "screenshot_test_template.dart"
+    test_dst = project_path / "screenshots" / "screenshot_test_template.dart"
     if template_src.exists() and not test_dst.exists():
         test_dst.parent.mkdir(parents=True, exist_ok=True)
         test_dst.write_text(template_src.read_text())

@@ -140,8 +140,8 @@ run_device() {
   # Run Flutter drive and watch output for screenshot signals
   SCREENSHOT_DIR="$backup_device_dir" \
   flutter drive \
-    --driver=test_driver/screenshot_driver.dart \
-    --target=integration_test/screenshot_test.dart \
+    --driver=screenshots/screenshot_driver.dart \
+    --target=screenshots/screenshot_test.dart \
     --device-id="$udid" \
     --no-pub \
     2>&1 | while IFS= read -r line; do
