@@ -1401,6 +1401,13 @@ async function loadStoreListing() {
     // Feature graphic fields
     document.getElementById('fg_title').value = data.name || '';
     document.getElementById('fg_subtitle').value = data.promotional_text ? data.promotional_text.slice(0, 60) : '';
+    // Set gradient colors from project config
+    const grads = config && config.gradients ? config.gradients : {};
+    const firstGrad = Object.values(grads)[0];
+    if (firstGrad && firstGrad.length >= 2) {
+      document.getElementById('fg_color1').value = firstGrad[0];
+      document.getElementById('fg_color2').value = firstGrad[1];
+    }
     // Load images
     const fgImg = document.getElementById('featureGraphicPreview');
     fgImg.src = '/api/feature-graphic?t=' + Date.now();
@@ -1504,7 +1511,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
         elif path == "/api/feature-graphic":
             self._serve_image(PROJECT_DIR / "android" / "fastlane" / "metadata" / "android" / "en-US" / "images" / "featureGraphic.png")
         elif path == "/api/app-icon":
-            self._serve_image(PROJECT_DIR / "ios" / "fastlane" / "metadata" / "app_icon.png")
+            self._serve_image(self._find_app_icon())
         else:
             self.send_error(404)
 
@@ -1890,6 +1897,21 @@ class PreviewHandler(BaseHTTPRequestHandler):
         }
         self._serve_json(data)
 
+    def _find_app_icon(self):
+        """Find the app icon from various possible locations."""
+        candidates = [
+            PROJECT_DIR / "ios" / "fastlane" / "metadata" / "app_icon.png",
+            PROJECT_DIR / "assets" / "icons" / "app-icon.png",
+            PROJECT_DIR / "assets" / "icon" / "app-icon.png",
+            PROJECT_DIR / "android" / "fastlane" / "metadata" / "android" / "en-US" / "images" / "icon.png",
+            PROJECT_DIR / "android" / "app" / "src" / "main" / "res" / "mipmap-xxxhdpi" / "ic_launcher.png",
+            PROJECT_DIR / "android" / "app" / "src" / "main" / "res" / "mipmap-xxhdpi" / "ic_launcher.png",
+        ]
+        for c in candidates:
+            if c.exists():
+                return c
+        return candidates[0]  # return first path even if missing — _serve_image will 404
+
     def _serve_image(self, path):
         """Serve a PNG image file."""
         if path.exists():
@@ -1994,9 +2016,18 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 font_h = ImageFont.load_default()
                 font_s = font_h
 
-            # App icon
-            icon_path = PROJECT_DIR / "assets" / "icons" / "app-icon.png"
-            if icon_path.exists():
+            # App icon — check multiple locations
+            icon_path = None
+            for candidate in [
+                PROJECT_DIR / "assets" / "icons" / "app-icon.png",
+                PROJECT_DIR / "ios" / "fastlane" / "metadata" / "app_icon.png",
+                PROJECT_DIR / "android" / "app" / "src" / "main" / "res" / "mipmap-xxxhdpi" / "ic_launcher.png",
+                PROJECT_DIR / "android" / "app" / "src" / "main" / "res" / "mipmap-xxhdpi" / "ic_launcher.png",
+            ]:
+                if candidate.exists():
+                    icon_path = candidate
+                    break
+            if icon_path:
                 icon = Image.open(str(icon_path)).convert("RGBA").resize((80, 80), Image.LANCZOS)
                 img = img.convert("RGBA")
                 img.paste(icon, ((W - 80) // 2, 75), icon)
