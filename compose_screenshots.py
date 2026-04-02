@@ -882,7 +882,20 @@ PREVIEW_HTML = """<!DOCTYPE html>
       <div style="margin-top:20px; margin-bottom:12px;">
         <label style="color:#a1a1a6; font-size:12px; display:block; margin-bottom:8px;">Feature Graphic (1024x500, Android)</label>
         <img id="featureGraphicPreview" style="width:100%; max-width:512px; border-radius:8px; border:1px solid #2a2a2e; background:#000;" src="" alt="No feature graphic">
-        <button class="btn btn-secondary" onclick="regenerateFeatureGraphic()" style="margin-top:8px; font-size:12px; padding:6px 14px;">Regenerate Feature Graphic</button>
+        <div style="margin-top:10px;">
+          <label style="color:#a1a1a6; font-size:11px; display:block; margin-bottom:3px;">Title on graphic</label>
+          <input type="text" id="fg_title" placeholder="App name" style="width:100%; max-width:512px; background:#1c1c1f; border:1px solid #2a2a2e; color:#fff; padding:6px 10px; border-radius:6px; font-size:13px; margin-bottom:6px;">
+        </div>
+        <div>
+          <label style="color:#a1a1a6; font-size:11px; display:block; margin-bottom:3px;">Subtitle on graphic</label>
+          <input type="text" id="fg_subtitle" placeholder="Short tagline" style="width:100%; max-width:512px; background:#1c1c1f; border:1px solid #2a2a2e; color:#fff; padding:6px 10px; border-radius:6px; font-size:13px; margin-bottom:6px;">
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; margin-top:4px;">
+          <label style="color:#a1a1a6; font-size:11px;">Gradient</label>
+          <input type="color" id="fg_color1" value="#D06F4B" style="width:32px; height:24px; border:none; cursor:pointer;">
+          <input type="color" id="fg_color2" value="#7D3419" style="width:32px; height:24px; border:none; cursor:pointer;">
+        </div>
+        <button class="btn btn-secondary" onclick="regenerateFeatureGraphic()" style="margin-top:10px; font-size:12px; padding:6px 14px;">Regenerate Feature Graphic</button>
       </div>
       <div style="margin-top:20px; margin-bottom:12px;">
         <label style="color:#a1a1a6; font-size:12px; display:block; margin-bottom:8px;">App Icon</label>
@@ -1382,6 +1395,9 @@ async function loadStoreListing() {
     document.getElementById('sl_marketing_url').value = data.marketing_url || '';
     document.getElementById('sl_privacy_url').value = data.privacy_url || '';
     document.getElementById('sl_copyright').value = data.copyright || '';
+    // Feature graphic fields
+    document.getElementById('fg_title').value = data.name || '';
+    document.getElementById('fg_subtitle').value = data.promotional_text ? data.promotional_text.slice(0, 60) : '';
     // Load images
     const fgImg = document.getElementById('featureGraphicPreview');
     fgImg.src = '/api/feature-graphic?t=' + Date.now();
@@ -1425,7 +1441,17 @@ async function saveStoreListing() {
 async function regenerateFeatureGraphic() {
   setStatus('Regenerating feature graphic...', 'working');
   try {
-    const resp = await fetch('/api/regenerate-feature-graphic', { method: 'POST' });
+    const payload = {
+      title: document.getElementById('fg_title').value,
+      subtitle: document.getElementById('fg_subtitle').value,
+      color1: document.getElementById('fg_color1').value,
+      color2: document.getElementById('fg_color2').value,
+    };
+    const resp = await fetch('/api/regenerate-feature-graphic', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
     const result = await resp.json();
     if (result.success) {
       document.getElementById('featureGraphicPreview').src = '/api/feature-graphic?t=' + Date.now();
@@ -1915,23 +1941,35 @@ class PreviewHandler(BaseHTTPRequestHandler):
             self._serve_json({"success": False, "error": str(e)})
 
     def _handle_regenerate_feature_graphic(self):
-        """Regenerate the Android feature graphic from project config."""
+        """Regenerate the Android feature graphic with custom text and colors."""
         try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length) if content_length > 0 else b"{}"
+            params = json.loads(body) if body.strip() else {}
+
             out_path = PROJECT_DIR / "android" / "fastlane" / "metadata" / "android" / "en-US" / "images" / "featureGraphic.png"
             out_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Read project config for gradient colors
-            c1, c2 = (100, 100, 200), (50, 50, 100)
-            app_name = PROJECT_CONFIG.get("app_name", "App")
-            subtitle = PROJECT_CONFIG.get("app_description", "")[:60]
-            grads = PROJECT_CONFIG.get("gradients", {})
-            if grads:
-                first_grad = list(grads.values())[0]
-                if len(first_grad) >= 2:
-                    h1 = first_grad[0].lstrip("#")
-                    h2 = first_grad[1].lstrip("#")
-                    c1 = (int(h1[0:2], 16), int(h1[2:4], 16), int(h1[4:6], 16))
-                    c2 = (int(h2[0:2], 16), int(h2[2:4], 16), int(h2[4:6], 16))
+            # Use params from UI, fall back to project config
+            app_name = params.get("title") or PROJECT_CONFIG.get("app_name", "App")
+            subtitle = params.get("subtitle") or PROJECT_CONFIG.get("app_description", "")[:60]
+
+            # Colors from UI or project config
+            def hex_to_rgb(h):
+                h = h.lstrip("#")
+                return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+
+            if params.get("color1") and params.get("color2"):
+                c1 = hex_to_rgb(params["color1"])
+                c2 = hex_to_rgb(params["color2"])
+            else:
+                c1, c2 = (100, 100, 200), (50, 50, 100)
+                grads = PROJECT_CONFIG.get("gradients", {})
+                if grads:
+                    first_grad = list(grads.values())[0]
+                    if len(first_grad) >= 2:
+                        c1 = hex_to_rgb(first_grad[0])
+                        c2 = hex_to_rgb(first_grad[1])
 
             W, H = 1024, 500
             arr = np.zeros((H, W, 3), dtype=np.uint8)
@@ -1956,15 +1994,16 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 img = img.convert("RGB")
                 draw = ImageDraw.Draw(img)
 
-            # Text
+            # Title
             bbox = draw.textbbox((0, 0), app_name, font=font_h)
             draw.text(((W - (bbox[2] - bbox[0])) // 2, 170), app_name, font=font_h, fill=(255, 255, 255))
+            # Subtitle
             if subtitle:
                 bbox2 = draw.textbbox((0, 0), subtitle, font=font_s)
                 draw.text(((W - (bbox2[2] - bbox2[0])) // 2, 250), subtitle, font=font_s, fill=(255, 255, 255, 200))
 
             img.save(str(out_path), "PNG")
-            print(f"[STORE] Feature graphic regenerated: {out_path}")
+            print(f"[STORE] Feature graphic regenerated: title='{app_name}' subtitle='{subtitle}'")
             self._serve_json({"success": True})
         except Exception as e:
             import traceback
