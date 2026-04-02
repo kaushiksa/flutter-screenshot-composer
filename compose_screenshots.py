@@ -945,6 +945,9 @@ async function switchProject(name) {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ name: name }),
   });
+  // Remember if store panel was open
+  if (storePanelOpen) sessionStorage.setItem('storePanelOpen', '1');
+  else sessionStorage.removeItem('storePanelOpen');
   location.reload();
 }
 
@@ -1464,7 +1467,13 @@ async function regenerateFeatureGraphic() {
   }
 }
 
-init();
+init().then(() => {
+  // Reopen store panel if it was open before a project switch
+  if (sessionStorage.getItem('storePanelOpen') === '1') {
+    sessionStorage.removeItem('storePanelOpen');
+    toggleStorePanel();
+  }
+});
 </script>
 </body>
 </html>"""
