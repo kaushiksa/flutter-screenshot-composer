@@ -818,7 +818,11 @@ PREVIEW_HTML = """<!DOCTYPE html>
     <button class="nav-arrow right" onclick="nextScreen()">&rsaquo;</button>
   </div>
 </div>
-<div class="status" id="status">Adjust settings, then click Generate All. Enter=refresh, Arrow keys=navigate screens.</div>
+<div style="display:flex; align-items:center; gap:0; border-top:1px solid #2a2a2e;">
+  <div class="status" id="status" style="flex:1;">Adjust settings, then click Generate All. Enter=refresh, Arrow keys=navigate screens.</div>
+  <button id="logToggle" onclick="toggleLog()" style="background:none; border:none; border-left:1px solid #2a2a2e; color:#666; cursor:pointer; padding:8px 14px; font-size:11px; white-space:nowrap;">Logs ▼</button>
+</div>
+<pre id="logPanel" style="display:none; max-height:250px; overflow-y:auto; background:#0a0a0a; color:#999; padding:10px 14px; margin:0; font-size:11px; line-height:1.5; white-space:pre-wrap; word-break:break-all; border-top:1px solid #1a1a1a;"></pre>
 
 <!-- Store Listing Panel -->
 <div id="storePanel" style="display:none; position:fixed; top:53px; left:0; right:0; bottom:0; z-index:1000; background:#141416; overflow-y:auto; padding:20px 24px;">
@@ -1227,10 +1231,31 @@ function resetDefaults() {
   setStatus('Reset to defaults', 'success');
 }
 
+let logPanelOpen = false;
+
 function setStatus(msg, cls) {
   const el = document.getElementById('status');
   el.textContent = msg;
   el.className = 'status ' + (cls || '');
+}
+
+function appendLog(msg) {
+  const panel = document.getElementById('logPanel');
+  const ts = new Date().toLocaleTimeString('en-US', {hour12: false, hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  panel.textContent += ts + ' | ' + msg + '\\n';
+  panel.scrollTop = panel.scrollHeight;
+  // Auto-open log panel on first log line
+  if (!logPanelOpen) toggleLog();
+}
+
+function toggleLog() {
+  logPanelOpen = !logPanelOpen;
+  document.getElementById('logPanel').style.display = logPanelOpen ? 'block' : 'none';
+  document.getElementById('logToggle').textContent = logPanelOpen ? 'Logs ▲' : 'Logs ▼';
+}
+
+function clearLog() {
+  document.getElementById('logPanel').textContent = '';
 }
 
 // Live label updates + debounced preview while dragging sliders
@@ -1257,10 +1282,9 @@ async function uploadStore(target, mode) {
   readUI();
   const btns = ['uploadIosBtn', 'uploadAndroidBtn', 'uploadMetaBtn', 'uploadAllBtn', 'generateBtn'];
   btns.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
-  // Clear previous log
-  const oldLog = document.getElementById('uploadLog');
-  if (oldLog) oldLog.remove();
+  clearLog();
   setStatus('Uploading ' + modeLabels[mode] + ' to ' + targetLabels[target] + '...', 'working');
+  appendLog('Starting upload: ' + modeLabels[mode] + ' → ' + targetLabels[target]);
   try {
     const payload = Object.assign({}, config, { upload_target: target, upload_mode: mode });
     const resp = await fetch('/api/upload', {
@@ -1281,21 +1305,10 @@ async function uploadStore(target, mode) {
         if (line.startsWith('data: ')) {
           try {
             const msg = JSON.parse(line.slice(6));
-            if (msg.type === 'progress') setStatus(msg.message, 'working');
-            else if (msg.type === 'log') {
-              setStatus(msg.message, 'working');
-              let logEl = document.getElementById('uploadLog');
-              if (!logEl) {
-                logEl = document.createElement('pre');
-                logEl.id = 'uploadLog';
-                logEl.style.cssText = 'max-height:300px;overflow:auto;background:#1a1a1a;color:#ccc;padding:12px;border-radius:8px;font-size:11px;margin-top:8px;white-space:pre-wrap;word-break:break-all;';
-                document.getElementById('status').parentNode.insertBefore(logEl, document.getElementById('status').nextSibling);
-              }
-              logEl.textContent += msg.message + '\\n';
-              logEl.scrollTop = logEl.scrollHeight;
-            }
-            else if (msg.type === 'done') { setStatus('Upload complete! ' + label, 'success'); }
-            else if (msg.type === 'error') setStatus('Error: ' + msg.message, 'error');
+            if (msg.type === 'progress') { setStatus(msg.message, 'working'); appendLog(msg.message); }
+            else if (msg.type === 'log') { setStatus(msg.message, 'working'); appendLog(msg.message); }
+            else if (msg.type === 'done') { setStatus('Upload complete! ' + label, 'success'); appendLog('DONE: ' + msg.message); }
+            else if (msg.type === 'error') { setStatus('Error: ' + msg.message, 'error'); appendLog('ERROR: ' + msg.message); }
           } catch(e) {}
         }
       }
@@ -1333,6 +1346,8 @@ async function captureScreenshots() {
   const btn = document.getElementById('captureBtn');
   const allBtns = ['captureBtn', 'generateBtn', 'uploadIosBtn', 'uploadAndroidBtn', 'uploadMetaBtn', 'uploadAllBtn'];
   allBtns.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
+  clearLog();
+  appendLog('Starting screenshot capture...');
   btn.textContent = 'Capturing...';
   setStatus('Launching simulator and capturing screenshots...', 'working');
   try {
@@ -1354,21 +1369,22 @@ async function captureScreenshots() {
         if (line.startsWith('data: ')) {
           try {
             const msg = JSON.parse(line.slice(6));
-            if (msg.type === 'progress') setStatus(msg.message, 'working');
+            if (msg.type === 'progress') { setStatus(msg.message, 'working'); appendLog(msg.message); }
+            else if (msg.type === 'log') { appendLog(msg.message); }
             else if (msg.type === 'done') {
               setStatus('Capture complete! Refreshing...', 'success');
-              // Refresh available screenshots
+              appendLog('DONE: ' + msg.message);
               const avResp = await fetch('/api/available');
               availableScreens = await avResp.json();
               buildDeviceTabs(); buildScreenTabs();
               updatePreview();
             }
-            else if (msg.type === 'error') setStatus('Capture error: ' + msg.message, 'error');
+            else if (msg.type === 'error') { setStatus('Capture error: ' + msg.message, 'error'); appendLog('ERROR: ' + msg.message); }
           } catch(e) {}
         }
       }
     }
-  } catch (e) { setStatus('Capture error: ' + e.message, 'error'); }
+  } catch (e) { setStatus('Capture error: ' + e.message, 'error'); appendLog('ERROR: ' + e.message); }
   allBtns.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = false; });
   btn.textContent = 'Capture from Simulator';
 }
@@ -1774,7 +1790,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 line = line.strip()
                 if line:
                     print(f"  [CAPTURE] {line}")
-                    self._send_sse({"type": "progress", "message": line})
+                    self._send_sse({"type": "log", "message": line})
             proc.wait()
 
             if proc.returncode == 0:
