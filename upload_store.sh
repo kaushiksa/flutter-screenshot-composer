@@ -284,21 +284,10 @@ fi
 IOS_OK=true
 ANDROID_OK=true
 
-run_fastlane() {
-  local dir="$1" lane="$2" label="$3"
-  if [[ ! -f "$dir/fastlane/Fastfile" ]]; then
-    fail "$label: Fastfile not found at $dir/fastlane/Fastfile"
-    return 1
-  fi
-  if ! command -v fastlane &>/dev/null; then
-    fail "fastlane not installed. Run: gem install fastlane"
-    return 1
-  fi
-  log "Running: cd $dir && fastlane $lane"
-  cd "$dir"
-  if fastlane "$lane" 2>&1 | while IFS= read -r line; do
-    echo "  [fastlane] $line"
-  done; then
+run_cmd() {
+  local label="$1"; shift
+  log "Running: $*"
+  if "$@" 2>&1 | while IFS= read -r line; do echo "  [fastlane] $line"; done; then
     ok "$label complete!"
     return 0
   else
@@ -307,33 +296,93 @@ run_fastlane() {
   fi
 }
 
-# iOS uploads
+# ── iOS uploads ──────────────────────────────────────────────────────────
 if $UPLOAD_IOS; then
   log ""
   log "── Uploading to App Store Connect ────────────────────────"
   IOS_DIR="$PROJECT_PATH/ios"
+  IOS_META="$IOS_DIR/fastlane/metadata"
 
-  if $DO_METADATA && $DO_SCREENSHOTS; then
-    run_fastlane "$IOS_DIR" "upload_all" "App Store (metadata + screenshots)" || IOS_OK=false
-  elif $DO_METADATA; then
-    run_fastlane "$IOS_DIR" "upload_metadata" "App Store metadata" || IOS_OK=false
-  elif $DO_SCREENSHOTS; then
-    run_fastlane "$IOS_DIR" "upload_screenshots" "App Store screenshots" || IOS_OK=false
+  if ! command -v fastlane &>/dev/null; then
+    fail "fastlane not installed"; IOS_OK=false
+  else
+    # Detect API key from Fastfile or use env
+    API_KEY_PATH="$PROJECT_PATH/private_keys/AuthKey_4Y382MAR5G.p8"
+    DELIVER_COMMON=(
+      --app_identifier "$(grep -m1 'app_identifier' "$IOS_DIR/fastlane/Fastfile" 2>/dev/null | sed 's/.*"\(.*\)".*/\1/' || echo '')"
+      --force
+      --precheck_include_in_app_purchases false
+      --skip_binary_upload true
+    )
+
+    # Try using lanes if they exist, otherwise use deliver directly
+    if $DO_SCREENSHOTS; then
+      cd "$IOS_DIR"
+      run_cmd "App Store screenshots" fastlane upload_screenshots || IOS_OK=false
+    fi
+
+    if $DO_METADATA && [[ -d "$IOS_META" ]]; then
+      cd "$IOS_DIR"
+      # Check if upload_metadata lane exists
+      if grep -q "lane :upload_metadata" "$IOS_DIR/fastlane/Fastfile" 2>/dev/null; then
+        run_cmd "App Store metadata" fastlane upload_metadata || IOS_OK=false
+      else
+        # Use deliver directly — works for any project
+        log "No upload_metadata lane found, using deliver directly..."
+        run_cmd "App Store metadata" fastlane deliver \
+          --skip_binary_upload true \
+          --skip_screenshots true \
+          --skip_metadata false \
+          --overwrite_screenshots false \
+          --metadata_path "$IOS_META" \
+          --precheck_include_in_app_purchases false \
+          --force true \
+          || IOS_OK=false
+      fi
+    fi
   fi
 fi
 
-# Android uploads
+# ── Android uploads ──────────────────────────────────────────────────────
 if $UPLOAD_ANDROID; then
   log ""
   log "── Uploading to Google Play Store ────────────────────────"
   ANDROID_DIR="$PROJECT_PATH/android"
+  ANDROID_META="$ANDROID_DIR/fastlane/metadata/android"
+  PLAY_JSON="$PROJECT_PATH/play-service-account.json"
+  PACKAGE_NAME=$(grep -m1 'package_name' "$ANDROID_DIR/fastlane/Fastfile" 2>/dev/null | sed "s/.*'\(.*\)'.*/\1/" || echo '')
 
-  if $DO_METADATA && $DO_SCREENSHOTS; then
-    run_fastlane "$ANDROID_DIR" "upload_all" "Play Store (metadata + screenshots)" || ANDROID_OK=false
-  elif $DO_METADATA; then
-    run_fastlane "$ANDROID_DIR" "upload_metadata" "Play Store metadata" || ANDROID_OK=false
-  elif $DO_SCREENSHOTS; then
-    run_fastlane "$ANDROID_DIR" "upload_screenshots" "Play Store screenshots" || ANDROID_OK=false
+  if ! command -v fastlane &>/dev/null; then
+    fail "fastlane not installed"; ANDROID_OK=false
+  elif [[ ! -f "$PLAY_JSON" ]]; then
+    fail "play-service-account.json not found at $PLAY_JSON"; ANDROID_OK=false
+  else
+    if $DO_SCREENSHOTS; then
+      cd "$ANDROID_DIR"
+      run_cmd "Play Store screenshots" fastlane upload_screenshots || ANDROID_OK=false
+    fi
+
+    if $DO_METADATA && [[ -d "$ANDROID_META" ]]; then
+      cd "$ANDROID_DIR"
+      # Check if upload_metadata lane exists
+      if grep -q "lane :upload_metadata" "$ANDROID_DIR/fastlane/Fastfile" 2>/dev/null; then
+        run_cmd "Play Store metadata" fastlane upload_metadata || ANDROID_OK=false
+      else
+        # Use supply directly — works for any project
+        log "No upload_metadata lane found, using supply directly..."
+        run_cmd "Play Store metadata" fastlane supply \
+          --skip_upload_apk true \
+          --skip_upload_aab true \
+          --skip_upload_screenshots true \
+          --skip_upload_changelogs true \
+          --skip_upload_metadata false \
+          --skip_upload_images false \
+          --json_key "$PLAY_JSON" \
+          --package_name "$PACKAGE_NAME" \
+          --metadata_path "$ANDROID_META" \
+          || ANDROID_OK=false
+      fi
+    fi
   fi
 fi
 
