@@ -1806,6 +1806,23 @@ class PreviewHandler(BaseHTTPRequestHandler):
             proc.wait()
 
             if proc.returncode == 0:
+                # Copy screenshots from app dir to composer's project_data
+                # (capture scripts may save to app/screenshots/ not project_data/)
+                app_screenshots = PROJECT_DIR / "screenshots"
+                data_screenshots = PROJECT_DATA_DIR / "screenshots"
+                copied = 0
+                for device_dir in ("iPhone 6.7-inch", "iPad Pro 13-inch"):
+                    src = app_screenshots / device_dir
+                    if src.exists():
+                        dst = data_screenshots / device_dir
+                        dst.mkdir(parents=True, exist_ok=True)
+                        import shutil
+                        for png in src.glob("*.png"):
+                            shutil.copy2(str(png), str(dst / png.name))
+                            copied += 1
+                if copied > 0:
+                    self._send_sse({"type": "log", "message": f"Copied {copied} screenshots to composer project data"})
+                    print(f"[CAPTURE] Copied {copied} screenshots to {data_screenshots}")
                 self._send_sse({"type": "done", "message": "Capture complete!"})
                 print(f"[CAPTURE] Done! ({target})")
             else:
