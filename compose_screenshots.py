@@ -735,6 +735,7 @@ PREVIEW_HTML = """<!DOCTYPE html>
     <button class="btn btn-secondary" id="uploadAndroidBtn" onclick="uploadStore('android', 'screenshots')" style="background:#3DDC84; color:#1a1a1a;">Upload Android</button>
     <button class="btn btn-secondary" id="uploadMetaBtn" onclick="uploadStore('both', 'metadata')" style="background:#F59E0B; color:#1a1a1a;">Upload Metadata</button>
     <button class="btn btn-secondary" id="uploadAllBtn" onclick="uploadStore('both', 'all')" style="background:#2563EB; color:white;">Upload Everything</button>
+    <button class="btn btn-secondary" id="storeListingBtn" onclick="toggleStorePanel()" style="background:#E11D48; color:white;">Store Listing</button>
   </div>
 </div>
 <div class="main">
@@ -818,6 +819,78 @@ PREVIEW_HTML = """<!DOCTYPE html>
   </div>
 </div>
 <div class="status" id="status">Adjust settings, then click Generate All. Enter=refresh, Arrow keys=navigate screens.</div>
+
+<!-- Store Listing Panel -->
+<div id="storePanel" style="display:none; background:#141416; border-top:1px solid #2a2a2e; padding:20px 24px;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+    <h2 style="margin:0; color:#fff; font-size:18px;">Store Listing</h2>
+    <div style="display:flex; gap:8px;">
+      <button class="btn btn-green" onclick="saveStoreListing()" style="font-size:12px; padding:6px 14px;">Save</button>
+      <button class="btn btn-secondary" onclick="toggleStorePanel()" style="font-size:12px; padding:6px 14px;">Close</button>
+    </div>
+  </div>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+    <!-- Left: Text fields -->
+    <div>
+      <div style="margin-bottom:12px;">
+        <label style="color:#a1a1a6; font-size:12px; display:block; margin-bottom:4px;">App Name <span style="color:#555">(30 chars)</span></label>
+        <input type="text" id="sl_name" maxlength="30" style="width:100%; background:#1c1c1f; border:1px solid #2a2a2e; color:#fff; padding:8px 10px; border-radius:6px; font-size:14px;">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="color:#a1a1a6; font-size:12px; display:block; margin-bottom:4px;">Subtitle (iOS) <span style="color:#555">(30 chars)</span></label>
+        <input type="text" id="sl_subtitle" maxlength="30" style="width:100%; background:#1c1c1f; border:1px solid #2a2a2e; color:#fff; padding:8px 10px; border-radius:6px; font-size:14px;">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="color:#a1a1a6; font-size:12px; display:block; margin-bottom:4px;">Short Description (Android) <span style="color:#555">(80 chars)</span></label>
+        <input type="text" id="sl_short_desc" maxlength="80" style="width:100%; background:#1c1c1f; border:1px solid #2a2a2e; color:#fff; padding:8px 10px; border-radius:6px; font-size:14px;">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="color:#a1a1a6; font-size:12px; display:block; margin-bottom:4px;">Keywords (iOS) <span style="color:#555">(100 chars, comma-separated)</span></label>
+        <input type="text" id="sl_keywords" maxlength="100" style="width:100%; background:#1c1c1f; border:1px solid #2a2a2e; color:#fff; padding:8px 10px; border-radius:6px; font-size:14px;">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="color:#a1a1a6; font-size:12px; display:block; margin-bottom:4px;">Promotional Text (iOS) <span style="color:#555">(170 chars)</span></label>
+        <textarea id="sl_promo" maxlength="170" rows="2" style="width:100%; background:#1c1c1f; border:1px solid #2a2a2e; color:#fff; padding:8px 10px; border-radius:6px; font-size:13px; resize:vertical;"></textarea>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="color:#a1a1a6; font-size:12px; display:block; margin-bottom:4px;">Description <span style="color:#555">(4000 chars, shared iOS+Android)</span></label>
+        <textarea id="sl_description" maxlength="4000" rows="8" style="width:100%; background:#1c1c1f; border:1px solid #2a2a2e; color:#fff; padding:8px 10px; border-radius:6px; font-size:13px; resize:vertical;"></textarea>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="color:#a1a1a6; font-size:12px; display:block; margin-bottom:4px;">Release Notes / What's New <span style="color:#555">(4000 iOS / 500 Android)</span></label>
+        <textarea id="sl_release_notes" maxlength="4000" rows="4" style="width:100%; background:#1c1c1f; border:1px solid #2a2a2e; color:#fff; padding:8px 10px; border-radius:6px; font-size:13px; resize:vertical;"></textarea>
+      </div>
+    </div>
+    <!-- Right: URLs + Feature Graphic -->
+    <div>
+      <div style="margin-bottom:12px;">
+        <label style="color:#a1a1a6; font-size:12px; display:block; margin-bottom:4px;">Support URL</label>
+        <input type="url" id="sl_support_url" style="width:100%; background:#1c1c1f; border:1px solid #2a2a2e; color:#fff; padding:8px 10px; border-radius:6px; font-size:14px;">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="color:#a1a1a6; font-size:12px; display:block; margin-bottom:4px;">Marketing URL</label>
+        <input type="url" id="sl_marketing_url" style="width:100%; background:#1c1c1f; border:1px solid #2a2a2e; color:#fff; padding:8px 10px; border-radius:6px; font-size:14px;">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="color:#a1a1a6; font-size:12px; display:block; margin-bottom:4px;">Privacy Policy URL</label>
+        <input type="url" id="sl_privacy_url" style="width:100%; background:#1c1c1f; border:1px solid #2a2a2e; color:#fff; padding:8px 10px; border-radius:6px; font-size:14px;">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="color:#a1a1a6; font-size:12px; display:block; margin-bottom:4px;">Copyright</label>
+        <input type="text" id="sl_copyright" style="width:100%; background:#1c1c1f; border:1px solid #2a2a2e; color:#fff; padding:8px 10px; border-radius:6px; font-size:14px;">
+      </div>
+      <div style="margin-top:20px; margin-bottom:12px;">
+        <label style="color:#a1a1a6; font-size:12px; display:block; margin-bottom:8px;">Feature Graphic (1024x500, Android)</label>
+        <img id="featureGraphicPreview" style="width:100%; max-width:512px; border-radius:8px; border:1px solid #2a2a2e; background:#000;" src="" alt="No feature graphic">
+        <button class="btn btn-secondary" onclick="regenerateFeatureGraphic()" style="margin-top:8px; font-size:12px; padding:6px 14px;">Regenerate Feature Graphic</button>
+      </div>
+      <div style="margin-top:20px; margin-bottom:12px;">
+        <label style="color:#a1a1a6; font-size:12px; display:block; margin-bottom:8px;">App Icon</label>
+        <img id="appIconPreview" style="width:80px; height:80px; border-radius:16px; border:1px solid #2a2a2e; background:#000;" src="" alt="No icon">
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
 let config = null;
@@ -1200,7 +1273,7 @@ async function uploadStore(target, mode) {
                 logEl = document.createElement('pre');
                 logEl.id = 'uploadLog';
                 logEl.style.cssText = 'max-height:300px;overflow:auto;background:#1a1a1a;color:#ccc;padding:12px;border-radius:8px;font-size:11px;margin-top:8px;white-space:pre-wrap;word-break:break-all;';
-                document.getElementById('statusBar').parentNode.insertBefore(logEl, document.getElementById('statusBar').nextSibling);
+                document.getElementById('status').parentNode.insertBefore(logEl, document.getElementById('status').nextSibling);
               }
               logEl.textContent += msg.message + '\\n';
               logEl.scrollTop = logEl.scrollHeight;
@@ -1284,6 +1357,87 @@ async function captureScreenshots() {
   btn.textContent = 'Capture from Simulator';
 }
 
+// ── Store Listing Panel ────────────────────────────────────
+let storePanelOpen = false;
+
+function toggleStorePanel() {
+  storePanelOpen = !storePanelOpen;
+  const panel = document.getElementById('storePanel');
+  panel.style.display = storePanelOpen ? 'block' : 'none';
+  if (storePanelOpen) loadStoreListing();
+}
+
+async function loadStoreListing() {
+  try {
+    const resp = await fetch('/api/store-listing');
+    const data = await resp.json();
+    document.getElementById('sl_name').value = data.name || '';
+    document.getElementById('sl_subtitle').value = data.subtitle || '';
+    document.getElementById('sl_short_desc').value = data.short_description || '';
+    document.getElementById('sl_keywords').value = data.keywords || '';
+    document.getElementById('sl_promo').value = data.promotional_text || '';
+    document.getElementById('sl_description').value = data.description || '';
+    document.getElementById('sl_release_notes').value = data.release_notes || '';
+    document.getElementById('sl_support_url').value = data.support_url || '';
+    document.getElementById('sl_marketing_url').value = data.marketing_url || '';
+    document.getElementById('sl_privacy_url').value = data.privacy_url || '';
+    document.getElementById('sl_copyright').value = data.copyright || '';
+    // Load images
+    const fgImg = document.getElementById('featureGraphicPreview');
+    fgImg.src = '/api/feature-graphic?t=' + Date.now();
+    fgImg.onerror = () => { fgImg.alt = 'No feature graphic yet'; };
+    const iconImg = document.getElementById('appIconPreview');
+    iconImg.src = '/api/app-icon?t=' + Date.now();
+    iconImg.onerror = () => { iconImg.alt = 'No icon'; };
+  } catch (e) {
+    setStatus('Failed to load store listing: ' + e.message, 'error');
+  }
+}
+
+async function saveStoreListing() {
+  const data = {
+    name: document.getElementById('sl_name').value,
+    subtitle: document.getElementById('sl_subtitle').value,
+    short_description: document.getElementById('sl_short_desc').value,
+    keywords: document.getElementById('sl_keywords').value,
+    promotional_text: document.getElementById('sl_promo').value,
+    description: document.getElementById('sl_description').value,
+    release_notes: document.getElementById('sl_release_notes').value,
+    support_url: document.getElementById('sl_support_url').value,
+    marketing_url: document.getElementById('sl_marketing_url').value,
+    privacy_url: document.getElementById('sl_privacy_url').value,
+    copyright: document.getElementById('sl_copyright').value,
+  };
+  try {
+    const resp = await fetch('/api/save-store-listing', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data),
+    });
+    const result = await resp.json();
+    if (result.success) setStatus('Store listing saved! (' + (result.files_written || 0) + ' files updated)', 'success');
+    else setStatus('Save failed: ' + (result.error || 'unknown'), 'error');
+  } catch (e) {
+    setStatus('Save error: ' + e.message, 'error');
+  }
+}
+
+async function regenerateFeatureGraphic() {
+  setStatus('Regenerating feature graphic...', 'working');
+  try {
+    const resp = await fetch('/api/regenerate-feature-graphic', { method: 'POST' });
+    const result = await resp.json();
+    if (result.success) {
+      document.getElementById('featureGraphicPreview').src = '/api/feature-graphic?t=' + Date.now();
+      setStatus('Feature graphic regenerated!', 'success');
+    } else {
+      setStatus('Failed: ' + (result.error || 'unknown'), 'error');
+    }
+  } catch (e) {
+    setStatus('Error: ' + e.message, 'error');
+  }
+}
+
 init();
 </script>
 </body>
@@ -1310,6 +1464,12 @@ class PreviewHandler(BaseHTTPRequestHandler):
             self._serve_available()
         elif path == "/api/projects":
             self._serve_json(load_projects())
+        elif path == "/api/store-listing":
+            self._serve_store_listing()
+        elif path == "/api/feature-graphic":
+            self._serve_image(PROJECT_DIR / "android" / "fastlane" / "metadata" / "android" / "en-US" / "images" / "featureGraphic.png")
+        elif path == "/api/app-icon":
+            self._serve_image(PROJECT_DIR / "ios" / "fastlane" / "metadata" / "app_icon.png")
         else:
             self.send_error(404)
 
@@ -1333,6 +1493,10 @@ class PreviewHandler(BaseHTTPRequestHandler):
             self._handle_remove_project()
         elif path == "/api/switch-project":
             self._handle_switch_project()
+        elif path == "/api/save-store-listing":
+            self._handle_save_store_listing()
+        elif path == "/api/regenerate-feature-graphic":
+            self._handle_regenerate_feature_graphic()
         else:
             self.send_error(404)
 
@@ -1656,6 +1820,152 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 deleted.append(str(composed_path))
             print(f"[DELETE] {device}/{screen_key} — deleted {len(deleted)} files")
             self._serve_json({"success": True, "deleted": deleted})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            self._serve_json({"success": False, "error": str(e)})
+
+
+    # ── Store Listing Handlers ──────────────────────────────────────────────
+
+    def _read_meta_file(self, *path_parts):
+        """Read a metadata text file, return contents or empty string."""
+        p = PROJECT_DIR / Path(*path_parts)
+        return p.read_text().strip() if p.exists() else ""
+
+    def _serve_store_listing(self):
+        """Return all store listing metadata as JSON."""
+        ios = "ios/fastlane/metadata/en-US"
+        android = "android/fastlane/metadata/android/en-US"
+        data = {
+            "name": self._read_meta_file(ios, "name.txt"),
+            "subtitle": self._read_meta_file(ios, "subtitle.txt"),
+            "description": self._read_meta_file(ios, "description.txt"),
+            "keywords": self._read_meta_file(ios, "keywords.txt"),
+            "promotional_text": self._read_meta_file(ios, "promotional_text.txt"),
+            "release_notes": self._read_meta_file(ios, "release_notes.txt"),
+            "support_url": self._read_meta_file(ios, "support_url.txt"),
+            "marketing_url": self._read_meta_file(ios, "marketing_url.txt"),
+            "privacy_url": self._read_meta_file(ios, "privacy_url.txt"),
+            "copyright": self._read_meta_file("ios/fastlane/metadata", "copyright.txt"),
+            "short_description": self._read_meta_file(android, "short_description.txt"),
+            # Android title and full_description default to iOS values if not set
+            "android_title": self._read_meta_file(android, "title.txt"),
+            "android_full_description": self._read_meta_file(android, "full_description.txt"),
+        }
+        self._serve_json(data)
+
+    def _serve_image(self, path):
+        """Serve a PNG image file."""
+        if path.exists():
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.end_headers()
+            self.wfile.write(path.read_bytes())
+        else:
+            self.send_error(404, f"Image not found: {path.name}")
+
+    def _handle_save_store_listing(self):
+        """Save store listing fields to fastlane metadata files for both stores."""
+        body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        try:
+            data = json.loads(body)
+            files_written = 0
+
+            def write_if_set(rel_path, value):
+                nonlocal files_written
+                if value is not None:
+                    p = PROJECT_DIR / Path(rel_path)
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    p.write_text(value)
+                    files_written += 1
+
+            ios = "ios/fastlane/metadata/en-US"
+            android = "android/fastlane/metadata/android/en-US"
+
+            # iOS metadata
+            write_if_set(f"{ios}/name.txt", data.get("name"))
+            write_if_set(f"{ios}/subtitle.txt", data.get("subtitle"))
+            write_if_set(f"{ios}/description.txt", data.get("description"))
+            write_if_set(f"{ios}/keywords.txt", data.get("keywords"))
+            write_if_set(f"{ios}/promotional_text.txt", data.get("promotional_text"))
+            write_if_set(f"{ios}/release_notes.txt", data.get("release_notes"))
+            write_if_set(f"{ios}/support_url.txt", data.get("support_url"))
+            write_if_set(f"{ios}/marketing_url.txt", data.get("marketing_url"))
+            write_if_set(f"{ios}/privacy_url.txt", data.get("privacy_url"))
+            write_if_set("ios/fastlane/metadata/copyright.txt", data.get("copyright"))
+
+            # Android metadata (sync from iOS where shared)
+            write_if_set(f"{android}/title.txt", data.get("name"))
+            write_if_set(f"{android}/short_description.txt", data.get("short_description"))
+            # Use same description for Android unless different
+            write_if_set(f"{android}/full_description.txt", data.get("description"))
+            # Release notes → changelog
+            if data.get("release_notes"):
+                # Trim to 500 chars for Android
+                android_notes = data["release_notes"][:500]
+                write_if_set(f"{android}/changelogs/default.txt", android_notes)
+                files_written += 1
+
+            print(f"[STORE] Saved {files_written} metadata files")
+            self._serve_json({"success": True, "files_written": files_written})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            self._serve_json({"success": False, "error": str(e)})
+
+    def _handle_regenerate_feature_graphic(self):
+        """Regenerate the Android feature graphic from project config."""
+        try:
+            out_path = PROJECT_DIR / "android" / "fastlane" / "metadata" / "android" / "en-US" / "images" / "featureGraphic.png"
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Read project config for gradient colors
+            c1, c2 = (100, 100, 200), (50, 50, 100)
+            app_name = PROJECT_CONFIG.get("app_name", "App")
+            subtitle = PROJECT_CONFIG.get("app_description", "")[:60]
+            grads = PROJECT_CONFIG.get("gradients", {})
+            if grads:
+                first_grad = list(grads.values())[0]
+                if len(first_grad) >= 2:
+                    h1 = first_grad[0].lstrip("#")
+                    h2 = first_grad[1].lstrip("#")
+                    c1 = (int(h1[0:2], 16), int(h1[2:4], 16), int(h1[4:6], 16))
+                    c2 = (int(h2[0:2], 16), int(h2[2:4], 16), int(h2[4:6], 16))
+
+            W, H = 1024, 500
+            arr = np.zeros((H, W, 3), dtype=np.uint8)
+            for ch in range(3):
+                arr[:, :, ch] = np.linspace(c1[ch], c2[ch], H, dtype=np.uint8)[:, np.newaxis]
+            img = Image.fromarray(arr, "RGB")
+            draw = ImageDraw.Draw(img)
+
+            try:
+                font_h = ImageFont.truetype("/System/Library/Fonts/SFNS.ttf", 52)
+                font_s = ImageFont.truetype("/System/Library/Fonts/SFNS.ttf", 24)
+            except Exception:
+                font_h = ImageFont.load_default()
+                font_s = font_h
+
+            # App icon
+            icon_path = PROJECT_DIR / "assets" / "icons" / "app-icon.png"
+            if icon_path.exists():
+                icon = Image.open(str(icon_path)).convert("RGBA").resize((80, 80), Image.LANCZOS)
+                img = img.convert("RGBA")
+                img.paste(icon, ((W - 80) // 2, 75), icon)
+                img = img.convert("RGB")
+                draw = ImageDraw.Draw(img)
+
+            # Text
+            bbox = draw.textbbox((0, 0), app_name, font=font_h)
+            draw.text(((W - (bbox[2] - bbox[0])) // 2, 170), app_name, font=font_h, fill=(255, 255, 255))
+            if subtitle:
+                bbox2 = draw.textbbox((0, 0), subtitle, font=font_s)
+                draw.text(((W - (bbox2[2] - bbox2[0])) // 2, 250), subtitle, font=font_s, fill=(255, 255, 255, 200))
+
+            img.save(str(out_path), "PNG")
+            print(f"[STORE] Feature graphic regenerated: {out_path}")
+            self._serve_json({"success": True})
         except Exception as e:
             import traceback
             traceback.print_exc()
