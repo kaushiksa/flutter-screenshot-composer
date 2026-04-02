@@ -169,14 +169,30 @@ PYEOF
 if $DO_METADATA; then
   log "── Generating Store Assets ──────────────────────────────"
 
+  # Find app icon from multiple possible locations
+  ICON_SRC=""
+  for candidate in \
+    "$PROJECT_PATH/assets/icons/app-icon.png" \
+    "$PROJECT_PATH/assets/icon/app-icon.png" \
+    "$PROJECT_PATH/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" \
+    "$PROJECT_PATH/android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png" \
+    "$PROJECT_PATH/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png"; do
+    if [[ -f "$candidate" ]]; then
+      ICON_SRC="$candidate"
+      log "  Found icon: $ICON_SRC"
+      break
+    fi
+  done
+
   # iOS: app icon (1024x1024)
   IOS_META="$PROJECT_PATH/ios/fastlane/metadata"
   if [[ ! -f "$IOS_META/app_icon.png" ]]; then
-    ICON_SRC="$PROJECT_PATH/assets/icons/app-icon.png"
-    if [[ -f "$ICON_SRC" ]]; then
+    if [[ -n "$ICON_SRC" ]]; then
       mkdir -p "$IOS_META"
       sips -z 1024 1024 "$ICON_SRC" --out "$IOS_META/app_icon.png" 2>/dev/null
       ok "iOS app icon (1024x1024)"
+    else
+      warn "No app icon found — skipping iOS icon"
     fi
   else
     log "  iOS app icon already exists"
@@ -189,10 +205,11 @@ if $DO_METADATA; then
 
   # Android: icon (512x512)
   if [[ ! -f "$ANDROID_IMAGES/icon.png" ]]; then
-    ICON_SRC="$PROJECT_PATH/assets/icons/app-icon.png"
-    if [[ -f "$ICON_SRC" ]]; then
-      cp "$ICON_SRC" "$ANDROID_IMAGES/icon.png"
+    if [[ -n "$ICON_SRC" ]]; then
+      sips -z 512 512 "$ICON_SRC" --out "$ANDROID_IMAGES/icon.png" 2>/dev/null
       ok "Android app icon (512x512)"
+    else
+      warn "No app icon found — skipping Android icon"
     fi
   else
     log "  Android app icon already exists"
