@@ -8,13 +8,13 @@ A centralized tool for capturing, composing, and uploading App Store / Play Stor
 
 - **Multi-project** — Register all your Flutter projects, switch between them from the UI
 - **Browser-based UI** at `http://localhost:8234` for previewing and tweaking
-- **Auto-detects screens** from PNG files in the project's `screenshots/` folder
+- **Auto-detects screens** from PNG files
 - **Gradient backgrounds** with marketing headline/subheadline overlays
 - **AI-generated captions** via OpenAI (optional)
 - **Capture from Simulator** — trigger screenshot capture directly from the UI
 - **Auto-scales** to all required App Store & Play Store sizes
 - **Upload** to App Store Connect and Google Play via fastlane
-- Per-project config stored centrally — no files copied into your projects
+- **Centralized storage** — all screenshots, config, and composed output stored with the tool
 
 ---
 
@@ -23,10 +23,7 @@ A centralized tool for capturing, composing, and uploading App Store / Play Stor
 ### 1. Install
 
 ```bash
-# Clone to a permanent location
 git clone https://github.com/kaushiksa/flutter-screenshot-composer.git ~/tools/screenshot-composer
-
-# Install Python dependencies
 pip install Pillow numpy
 pip install openai  # optional, for AI captions
 ```
@@ -43,36 +40,37 @@ Opens the UI at `http://localhost:8234`.
 ### 3. Add your first project
 
 From the UI, click the **+** button next to the project dropdown:
-- Enter a name (e.g. "Dhi")
-- Enter the path to your Flutter project (e.g. `/Users/you/work/Dhi/v2/monorepo/app`)
+- Enter a name (e.g. "MyApp")
+- Enter the path to your Flutter project (e.g. `/Users/you/work/myapp`)
 
 Or from the CLI:
 ```bash
-python compose_screenshots.py --add-project "Dhi" "/Users/you/work/Dhi/v2/monorepo/app"
+python compose_screenshots.py --add-project "MyApp" "/Users/you/work/myapp"
 ```
 
 This will:
-- Register the project
-- Copy `screenshot_driver.dart` and `screenshot_test_template.dart` into the project (if not already present)
-- Switch to it as the active project
+- Register the project in `projects.json`
+- Create `project_data/MyApp/` for screenshots and config
+- Copy `screenshot_driver.dart` and `screenshot_test_template.dart` into your project's `screenshots/` folder
 
 ### 4. Add screenshots
 
 **Option A — Drop PNGs manually:**
-Place raw screenshots in your Flutter project:
+
+Place raw screenshots in the tool's project data folder:
 ```
-your_flutter_project/
-  screenshots/
-    iPhone 6.7-inch/
-      01_home.png
-      02_profile.png
-    iPad Pro 13-inch/
-      01_home.png
-      02_profile.png
+~/tools/screenshot-composer/project_data/MyApp/screenshots/
+  iPhone 6.7-inch/
+    01_home.png
+    02_profile.png
+  iPad Pro 13-inch/
+    01_home.png
+    02_profile.png
 ```
 
 **Option B — Capture from Simulator:**
-1. Customize `integration_test/screenshot_test.dart` in your project (copy from the template)
+
+1. Set up your project's screenshot test (see [Setting Up Automated Capture](#setting-up-automated-capture))
 2. Click **"Capture from Simulator"** in the UI
 
 ### 5. Compose & Upload
@@ -83,54 +81,53 @@ your_flutter_project/
 
 ---
 
-## Multi-Project Workflow
-
-The project selector dropdown in the UI header lets you:
-
-| Action | UI | CLI |
-|--------|-----|-----|
-| Add project | Click **+** | `--add-project "Name" "/path"` |
-| Switch project | Select from dropdown | `--project "Name"` |
-| Remove project | Click **x** | — |
-
-All project configs (layout settings, captions) are stored centrally in `project_data/<name>/`, so your Flutter projects stay clean.
-
-### What lives where
+## What Lives Where
 
 ```
-~/tools/screenshot-composer/          # The tool (install once)
-  compose_screenshots.py              # Main tool
-  take_screenshots.sh                 # Capture script
-  projects.json                       # Registry of all projects
+~/tools/screenshot-composer/              # The tool (install once)
+  compose_screenshots.py                  # Main tool
+  take_screenshots.sh                     # Capture script
+  projects.json                           # Registry of all projects
   project_data/
-    Dhi/                              # Per-project config
-      screenshot_config.json
-      screenshot_captions.json
-    FurFam/
-      screenshot_config.json
-      screenshot_captions.json
+    MyApp/                                # Everything for this project
+      screenshots/
+        iPhone 6.7-inch/                  # Raw screenshots
+          01_home.png
+        iPad Pro 13-inch/
+          01_home.png
+        composed/                         # Generated output
+          iPhone 6.7-inch/
+          iPhone 6.5-inch/                # Auto-scaled
+          Phone/                          # Play Store
+      screenshot_config.json              # Layout config (from UI tweaks)
+      screenshot_captions.json            # Captions
   test_driver/
-    screenshot_driver.dart            # Auto-copied to projects
+    screenshot_driver.dart                # Template (auto-copied to projects)
   integration_test/
-    screenshot_test_template.dart     # Auto-copied to projects
+    screenshot_test_template.dart         # Template (auto-copied to projects)
 
-your_flutter_project/                 # Your app (no tool files needed)
-  screenshot_project.json             # Optional: app name, screens, colors
-  screenshots/                        # Raw + composed screenshots
-    iPhone 6.7-inch/
-    iPad Pro 13-inch/
-    composed/
-  integration_test/
-    screenshot_test.dart              # Your app-specific navigation
-  test_driver/
-    screenshot_driver.dart            # Auto-copied by the tool
+your_flutter_project/                     # Your app (minimal footprint)
+  screenshot_project.json                 # Optional: app name, screens, colors
+  screenshots/                            # Only dart files for capture
+    screenshot_test.dart                  # Your app-specific capture test
+    screenshot_driver.dart                # Generic driver (auto-copied)
 ```
+
+**Your Flutter project stays clean** — no raw screenshots, no composed output, no config files. Just the optional project config and the dart files needed for automated capture.
 
 ---
 
-## Project Config (`screenshot_project.json`)
+## Setting Up a New Project
 
-Optional file in your Flutter project root. All fields are optional.
+### Step 1: Register
+
+```bash
+python compose_screenshots.py --add-project "MyApp" "/path/to/flutter/project"
+```
+
+### Step 2: Create `screenshot_project.json` (optional)
+
+Create this file in your Flutter project root:
 
 ```json
 {
@@ -138,14 +135,13 @@ Optional file in your Flutter project root. All fields are optional.
   "app_description": "a short description for AI caption generation",
   "screens": [
     {"key": "01_home", "label": "Home"},
-    {"key": "02_search", "label": "Search"}
+    {"key": "02_search", "label": "Search"},
+    {"key": "03_profile", "label": "Profile"}
   ],
   "gradients": {
     "01_home": ["#2563EB", "#1E40AF"],
-    "02_search": ["#7C3AED", "#5B21B6"]
-  },
-  "captions": {
-    "01_home": {"headline": "Welcome Home", "subheadline": "Everything at a glance"}
+    "02_search": ["#7C3AED", "#5B21B6"],
+    "03_profile": ["#10B981", "#059669"]
   },
   "capture": {
     "ipad_simulator": "iPad Pro 13-inch (M5)",
@@ -154,7 +150,49 @@ Optional file in your Flutter project root. All fields are optional.
 }
 ```
 
-Without this file, the tool auto-detects everything from the PNG filenames.
+Without this file, the tool auto-detects everything from the PNG filenames and assigns colors from a built-in palette.
+
+### Step 3: Add screenshots
+
+Either drop PNGs into `project_data/MyApp/screenshots/iPhone 6.7-inch/` or set up automated capture (see below).
+
+### Step 4: Launch and compose
+
+```bash
+python compose_screenshots.py
+```
+
+---
+
+## Setting Up Automated Capture
+
+When you register a project, the tool auto-copies two files into `your_project/screenshots/`:
+
+- `screenshot_driver.dart` — Generic, works as-is
+- `screenshot_test_template.dart` — Rename to `screenshot_test.dart` and customize
+
+### Customize `screenshot_test.dart`
+
+Fill in the TODOs:
+1. **Imports** — Your app's packages
+2. **Screen list** — Routes and filenames
+3. **App init** — Firebase, etc.
+4. **Auth** — Login if needed
+5. **Navigation** — GoRouter, Navigator, etc.
+
+Then click **"Capture from Simulator"** in the UI.
+
+---
+
+## Multi-Project Workflow
+
+| Action | UI | CLI |
+|--------|-----|-----|
+| Add project | Click **+** | `--add-project "Name" "/path"` |
+| Switch project | Select from dropdown | `--project "Name"` |
+| Remove project | Click **x** | — |
+
+Switching projects reloads all config, screenshots, and captions for that project.
 
 ---
 
@@ -194,15 +232,6 @@ From the iPhone 6.7" source, the tool automatically generates:
 | iPhone 5.5-inch | 1242 x 2208 | App Store (scaled) |
 | iPad Pro 13-inch | 2064 x 2752 | App Store (native) |
 | Phone | 1080 x 1920 | Play Store (cropped + scaled) |
-
----
-
-## Setting Up Automated Capture
-
-1. The tool auto-copies `screenshot_driver.dart` and `screenshot_test_template.dart` when you add a project
-2. Rename the template: `mv integration_test/screenshot_test_template.dart integration_test/screenshot_test.dart`
-3. Fill in the TODOs: your app imports, screen routes, auth setup
-4. Click **"Capture from Simulator"** in the UI
 
 ---
 
