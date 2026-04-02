@@ -1188,7 +1188,20 @@ async function uploadScreenshots(target) {
           try {
             const msg = JSON.parse(line.slice(6));
             if (msg.type === 'progress') setStatus(msg.message, 'working');
-            else if (msg.type === 'done') setStatus('Upload complete! Check ' + label + '.', 'success');
+            else if (msg.type === 'log') {
+              setStatus(msg.message, 'working');
+              // Append to log area if it exists
+              let logEl = document.getElementById('uploadLog');
+              if (!logEl) {
+                logEl = document.createElement('pre');
+                logEl.id = 'uploadLog';
+                logEl.style.cssText = 'max-height:300px;overflow:auto;background:#1a1a1a;color:#ccc;padding:12px;border-radius:8px;font-size:11px;margin-top:8px;white-space:pre-wrap;word-break:break-all;';
+                document.getElementById('statusBar').parentNode.insertBefore(logEl, document.getElementById('statusBar').nextSibling);
+              }
+              logEl.textContent += msg.message + '\\n';
+              logEl.scrollTop = logEl.scrollHeight;
+            }
+            else if (msg.type === 'done') { setStatus('Upload complete! Check ' + label + '.', 'success'); }
             else if (msg.type === 'error') setStatus('Error: ' + msg.message, 'error');
           } catch(e) {}
         }
@@ -1451,15 +1464,13 @@ class PreviewHandler(BaseHTTPRequestHandler):
             results = run_composition_streaming(self.config, self._send_sse)
             self._send_sse({"type": "progress", "message": f"Generated {len(results)} composed screenshots"})
 
-            # Step 2: Upload via fastlane
-            upload_script = PROJECT_DIR / "upload_screenshots.sh"
+            # Step 2: Upload via centralized upload script
+            upload_script = SCRIPT_DIR / "upload_screenshots.sh"
             if not upload_script.exists():
-                upload_script = SCRIPT_DIR / "upload_screenshots.sh"
-            if not upload_script.exists():
-                self._send_sse({"type": "error", "message": "upload_screenshots.sh not found"})
+                self._send_sse({"type": "error", "message": "upload_screenshots.sh not found in composer tool"})
                 return
 
-            # Build upload command with target flag
+            # Build upload command
             cmd = ["bash", str(upload_script)]
             if upload_target == "ios":
                 cmd.append("--ios")
@@ -1471,26 +1482,35 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 target_label = "App Store + Play Store"
 
             self._send_sse({"type": "progress", "message": f"Uploading to {target_label}..."})
+            print(f"[UPLOAD] Running: {' '.join(cmd)}")
+
+            last_lines = []  # Keep last N lines for error context
             proc = subprocess.Popen(
                 cmd,
-                cwd=str(PROJECT_DIR),
+                cwd=str(SCRIPT_DIR),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
             )
             for line in proc.stdout:
-                line = line.strip()
+                line = line.rstrip()
                 if line:
                     print(f"  {line}")
-                    self._send_sse({"type": "progress", "message": line})
+                    self._send_sse({"type": "log", "message": line})
+                    last_lines.append(line)
+                    if len(last_lines) > 50:
+                        last_lines.pop(0)
             proc.wait()
 
             if proc.returncode == 0:
                 self._send_sse({"type": "done", "message": f"Upload to {target_label} complete!"})
                 print(f"[UPLOAD] Done! ({target_label})")
             else:
-                self._send_sse({"type": "error", "message": f"Upload failed (exit code {proc.returncode})"})
+                # Include last few lines of output in error message for context
+                error_context = "\n".join(last_lines[-5:])
+                self._send_sse({"type": "error", "message": f"Upload failed (exit code {proc.returncode}):\n{error_context}"})
+                print(f"[UPLOAD] FAILED (exit code {proc.returncode})")
         except Exception as e:
             import traceback
             traceback.print_exc()
