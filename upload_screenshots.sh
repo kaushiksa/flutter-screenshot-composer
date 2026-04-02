@@ -78,8 +78,9 @@ fi
 
 DATA_DIR="$TOOL_DIR/project_data/$PROJECT_NAME/screenshots"
 COMPOSED_DIR="$DATA_DIR/composed"
-APPSTORE_DIR="$DATA_DIR/appstore/en-US"
-PLAYSTORE_DIR="$DATA_DIR/playstore/en-US/images/phoneScreenshots"
+# Organize into the app's screenshots/ dir — that's where fastlane Fastfiles look
+APPSTORE_DIR="$PROJECT_PATH/screenshots/appstore/en-US"
+PLAYSTORE_DIR="$PROJECT_PATH/screenshots/playstore/en-US/images/phoneScreenshots"
 
 log "═══════════════════════════════════════════════════════════"
 log "  Screenshot Upload — $PROJECT_NAME"
