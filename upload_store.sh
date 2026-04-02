@@ -371,6 +371,7 @@ if $UPLOAD_ANDROID; then
         # Use supply directly — works for any project
         log "No upload_metadata lane found, using supply directly..."
         run_cmd "Play Store metadata" fastlane supply \
+          --track internal \
           --skip_upload_apk true \
           --skip_upload_aab true \
           --skip_upload_screenshots true \
