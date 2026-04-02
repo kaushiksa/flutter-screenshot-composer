@@ -387,8 +387,13 @@ if $UPLOAD_ANDROID; then
       else
         # Use supply directly — works for any project
         log "No upload_metadata lane found, using supply directly..."
+        # Get latest version code from pubspec.yaml
+        VCODE=$(grep "^version:" "$PROJECT_PATH/pubspec.yaml" 2>/dev/null | sed 's/.*+//')
+        log "  Using version_code: $VCODE"
+
         run_cmd "Play Store metadata" fastlane supply \
           --track internal \
+          --version_code "${VCODE:-1}" \
           --skip_upload_apk true \
           --skip_upload_aab true \
           --skip_upload_screenshots true \
