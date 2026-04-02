@@ -731,9 +731,10 @@ PREVIEW_HTML = """<!DOCTYPE html>
     <button class="btn btn-secondary" onclick="updatePreview()">Refresh <span class="shortcut-hint">Enter</span></button>
     <button class="btn" id="captureBtn" onclick="captureScreenshots()" style="background:#F59E0B; color:#1a1a1a; font-weight:700;">Capture from Simulator</button>
     <button class="btn btn-green" id="generateBtn" onclick="generateAll()">Generate All</button>
-    <button class="btn btn-secondary" id="uploadIosBtn" onclick="uploadScreenshots('ios')" style="background:#7C3AED; color:white;">Upload iOS</button>
-    <button class="btn btn-secondary" id="uploadAndroidBtn" onclick="uploadScreenshots('android')" style="background:#3DDC84; color:#1a1a1a;">Upload Android</button>
-    <button class="btn btn-secondary" id="uploadBothBtn" onclick="uploadScreenshots('both')" style="background:#2563EB; color:white;">Upload Both</button>
+    <button class="btn btn-secondary" id="uploadIosBtn" onclick="uploadStore('ios', 'screenshots')" style="background:#7C3AED; color:white;">Upload iOS</button>
+    <button class="btn btn-secondary" id="uploadAndroidBtn" onclick="uploadStore('android', 'screenshots')" style="background:#3DDC84; color:#1a1a1a;">Upload Android</button>
+    <button class="btn btn-secondary" id="uploadMetaBtn" onclick="uploadStore('both', 'metadata')" style="background:#F59E0B; color:#1a1a1a;">Upload Metadata</button>
+    <button class="btn btn-secondary" id="uploadAllBtn" onclick="uploadStore('both', 'all')" style="background:#2563EB; color:white;">Upload Everything</button>
   </div>
 </div>
 <div class="main">
@@ -1159,16 +1160,20 @@ document.addEventListener('keydown', function(e) {
   else if (e.key === 'Enter') { e.preventDefault(); updatePreview(); }
 });
 
-async function uploadScreenshots(target) {
-  const labels = { ios: 'App Store Connect', android: 'Google Play Store', both: 'App Store + Play Store' };
-  const label = labels[target] || target;
-  if (!confirm('Generate + Upload screenshots to ' + label + '?')) return;
+async function uploadStore(target, mode) {
+  const targetLabels = { ios: 'App Store', android: 'Play Store', both: 'Both Stores' };
+  const modeLabels = { screenshots: 'screenshots', metadata: 'metadata + icons', all: 'everything' };
+  const label = targetLabels[target] + ' (' + modeLabels[mode] + ')';
+  if (!confirm('Upload ' + modeLabels[mode] + ' to ' + targetLabels[target] + '?')) return;
   readUI();
-  const btns = ['uploadIosBtn', 'uploadAndroidBtn', 'uploadBothBtn', 'generateBtn'];
-  btns.forEach(id => { document.getElementById(id).disabled = true; });
-  setStatus('Generating + uploading to ' + label + '...', 'working');
+  const btns = ['uploadIosBtn', 'uploadAndroidBtn', 'uploadMetaBtn', 'uploadAllBtn', 'generateBtn'];
+  btns.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
+  // Clear previous log
+  const oldLog = document.getElementById('uploadLog');
+  if (oldLog) oldLog.remove();
+  setStatus('Uploading ' + modeLabels[mode] + ' to ' + targetLabels[target] + '...', 'working');
   try {
-    const payload = Object.assign({}, config, { upload_target: target });
+    const payload = Object.assign({}, config, { upload_target: target, upload_mode: mode });
     const resp = await fetch('/api/upload', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -1190,7 +1195,6 @@ async function uploadScreenshots(target) {
             if (msg.type === 'progress') setStatus(msg.message, 'working');
             else if (msg.type === 'log') {
               setStatus(msg.message, 'working');
-              // Append to log area if it exists
               let logEl = document.getElementById('uploadLog');
               if (!logEl) {
                 logEl = document.createElement('pre');
@@ -1201,14 +1205,14 @@ async function uploadScreenshots(target) {
               logEl.textContent += msg.message + '\\n';
               logEl.scrollTop = logEl.scrollHeight;
             }
-            else if (msg.type === 'done') { setStatus('Upload complete! Check ' + label + '.', 'success'); }
+            else if (msg.type === 'done') { setStatus('Upload complete! ' + label, 'success'); }
             else if (msg.type === 'error') setStatus('Error: ' + msg.message, 'error');
           } catch(e) {}
         }
       }
     }
   } catch (e) { setStatus('Upload error: ' + e.message, 'error'); }
-  btns.forEach(id => { document.getElementById(id).disabled = false; });
+  btns.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
 }
 
 async function removeScreen() {
@@ -1238,7 +1242,7 @@ async function captureScreenshots() {
   const target = prompt('Capture from which device?\\n\\n1. all (iPad + iPhone)\\n2. ipad\\n3. iphone\\n\\nType: all, ipad, or iphone', 'all');
   if (!target || !['all', 'ipad', 'iphone'].includes(target.toLowerCase())) return;
   const btn = document.getElementById('captureBtn');
-  const allBtns = ['captureBtn', 'generateBtn', 'uploadIosBtn', 'uploadAndroidBtn', 'uploadBothBtn'];
+  const allBtns = ['captureBtn', 'generateBtn', 'uploadIosBtn', 'uploadAndroidBtn', 'uploadMetaBtn', 'uploadAllBtn'];
   allBtns.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
   btn.textContent = 'Capturing...';
   setStatus('Launching simulator and capturing screenshots...', 'working');
@@ -1445,12 +1449,13 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 pass
 
     def _handle_upload(self):
-        """Generate composed screenshots, then upload to stores with streaming progress."""
+        """Generate composed screenshots and/or upload to stores with streaming progress."""
         content_length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(content_length) if content_length > 0 else b"{}"
         try:
             new_config = json.loads(body) if body.strip() else {}
             upload_target = new_config.pop("upload_target", "both")
+            upload_mode = new_config.pop("upload_mode", "screenshots")  # screenshots, metadata, all
             if new_config:
                 self.config.update(new_config)
                 save_config(self.config)
@@ -1459,32 +1464,39 @@ class PreviewHandler(BaseHTTPRequestHandler):
 
             self._start_sse()
 
-            # Step 1: Generate composed screenshots
-            self._send_sse({"type": "progress", "message": "Generating composed screenshots..."})
-            results = run_composition_streaming(self.config, self._send_sse)
-            self._send_sse({"type": "progress", "message": f"Generated {len(results)} composed screenshots"})
+            # Step 1: Generate composed screenshots (if uploading screenshots or all)
+            if upload_mode in ("screenshots", "all"):
+                self._send_sse({"type": "progress", "message": "Generating composed screenshots..."})
+                results = run_composition_streaming(self.config, self._send_sse)
+                self._send_sse({"type": "progress", "message": f"Generated {len(results)} composed screenshots"})
 
-            # Step 2: Upload via centralized upload script
-            upload_script = SCRIPT_DIR / "upload_screenshots.sh"
+            # Step 2: Upload via upload_store.sh
+            upload_script = SCRIPT_DIR / "upload_store.sh"
             if not upload_script.exists():
-                self._send_sse({"type": "error", "message": "upload_screenshots.sh not found in composer tool"})
+                self._send_sse({"type": "error", "message": "upload_store.sh not found"})
                 return
 
             # Build upload command
             cmd = ["bash", str(upload_script)]
             if upload_target == "ios":
                 cmd.append("--ios")
-                target_label = "App Store"
             elif upload_target == "android":
                 cmd.append("--android")
-                target_label = "Play Store"
-            else:
-                target_label = "App Store + Play Store"
 
-            self._send_sse({"type": "progress", "message": f"Uploading to {target_label}..."})
+            if upload_mode == "screenshots":
+                cmd.append("--screenshots")
+            elif upload_mode == "metadata":
+                cmd.append("--metadata")
+            # "all" = default (both screenshots + metadata)
+
+            target_labels = {"ios": "App Store", "android": "Play Store", "both": "Both Stores"}
+            mode_labels = {"screenshots": "screenshots", "metadata": "metadata", "all": "everything"}
+            label = f"{target_labels.get(upload_target, upload_target)} ({mode_labels.get(upload_mode, upload_mode)})"
+
+            self._send_sse({"type": "progress", "message": f"Uploading {mode_labels.get(upload_mode, upload_mode)} to {target_labels.get(upload_target, upload_target)}..."})
             print(f"[UPLOAD] Running: {' '.join(cmd)}")
 
-            last_lines = []  # Keep last N lines for error context
+            last_lines = []
             proc = subprocess.Popen(
                 cmd,
                 cwd=str(SCRIPT_DIR),
@@ -1504,10 +1516,9 @@ class PreviewHandler(BaseHTTPRequestHandler):
             proc.wait()
 
             if proc.returncode == 0:
-                self._send_sse({"type": "done", "message": f"Upload to {target_label} complete!"})
-                print(f"[UPLOAD] Done! ({target_label})")
+                self._send_sse({"type": "done", "message": f"Upload complete! ({label})"})
+                print(f"[UPLOAD] Done! ({label})")
             else:
-                # Include last few lines of output in error message for context
                 error_context = "\n".join(last_lines[-5:])
                 self._send_sse({"type": "error", "message": f"Upload failed (exit code {proc.returncode}):\n{error_context}"})
                 print(f"[UPLOAD] FAILED (exit code {proc.returncode})")
