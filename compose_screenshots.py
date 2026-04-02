@@ -672,7 +672,7 @@ PREVIEW_HTML = """<!DOCTYPE html>
   .header .project-bar select:focus { border-color: #2563EB; outline: none; }
   .header .project-bar .proj-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid #444; background: #262626; color: #aaa; font-size: 14px; cursor: pointer; line-height: 1; }
   .header .project-bar .proj-btn:hover { background: #333; color: #fff; }
-  .header .actions { display: flex; gap: 8px; }
+  .header .actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .btn { padding: 8px 16px; border: none; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
   .btn-secondary { background: #333; color: #e5e5e5; }
   .btn-secondary:hover { background: #444; }
@@ -821,7 +821,7 @@ PREVIEW_HTML = """<!DOCTYPE html>
 <div class="status" id="status">Adjust settings, then click Generate All. Enter=refresh, Arrow keys=navigate screens.</div>
 
 <!-- Store Listing Panel -->
-<div id="storePanel" style="display:none; background:#141416; border-top:1px solid #2a2a2e; padding:20px 24px;">
+<div id="storePanel" style="display:none; position:fixed; top:53px; left:0; right:0; bottom:0; z-index:1000; background:#141416; overflow-y:auto; padding:20px 24px;">
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
     <h2 style="margin:0; color:#fff; font-size:18px;">Store Listing</h2>
     <div style="display:flex; gap:8px;">
