@@ -1633,7 +1633,6 @@ class PreviewHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "keep-alive")
         self.end_headers()
 
     def _send_sse(self, data: dict):
@@ -1643,6 +1642,15 @@ class PreviewHandler(BaseHTTPRequestHandler):
             self.wfile.write(line.encode())
             self.wfile.flush()
         except BrokenPipeError:
+            pass
+
+    def _end_sse(self):
+        """Close the SSE stream so the browser stops reading."""
+        try:
+            self.wfile.write(b"data: {\"type\":\"__end__\"}\n\n")
+            self.wfile.flush()
+            self.wfile.close()
+        except Exception:
             pass
 
     def _handle_generate(self):
@@ -1662,11 +1670,13 @@ class PreviewHandler(BaseHTTPRequestHandler):
 
             self._send_sse({"type": "done", "count": len(results), "files": results})
             print(f"[GENERATE] Done! {len(results)} screenshots generated.")
+            self._end_sse()
         except Exception as e:
             import traceback
             traceback.print_exc()
             try:
                 self._send_sse({"type": "error", "message": str(e)})
+                self._end_sse()
             except Exception:
                 pass
 
@@ -1744,11 +1754,13 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 error_context = "\n".join(last_lines[-5:])
                 self._send_sse({"type": "error", "message": f"Upload failed (exit code {proc.returncode}):\n{error_context}"})
                 print(f"[UPLOAD] FAILED (exit code {proc.returncode})")
+            self._end_sse()
         except Exception as e:
             import traceback
             traceback.print_exc()
             try:
                 self._send_sse({"type": "error", "message": str(e)})
+                self._end_sse()
             except Exception:
                 pass
 
@@ -1798,6 +1810,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 print(f"[CAPTURE] Done! ({target})")
             else:
                 self._send_sse({"type": "error", "message": f"Capture failed (exit code {proc.returncode})"})
+            self._end_sse()
         except Exception as e:
             import traceback
             traceback.print_exc()
