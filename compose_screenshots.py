@@ -41,7 +41,7 @@ except ImportError:
 SCRIPT_DIR = Path(__file__).parent.resolve()
 FONT_PATH = SCRIPT_DIR / "fonts" / "Inter.ttc"
 PROJECTS_FILE = SCRIPT_DIR / "projects.json"
-PREVIEW_PORT = 8234
+PREVIEW_PORT = 8666
 
 # Active project state — set by switch_project()
 PROJECT_DIR = SCRIPT_DIR  # fallback: tool dir itself
@@ -1505,7 +1505,10 @@ init().then(() => {
 class PreviewHandler(BaseHTTPRequestHandler):
     def __init__(self, config, *args, **kwargs):
         self.config = config
-        super().__init__(*args, **kwargs)
+        try:
+            super().__init__(*args, **kwargs)
+        except ValueError:
+            pass  # Suppress "I/O operation on closed file" after SSE stream ends
 
     def log_message(self, format, *args):
         cmd = getattr(self, 'command', '?')
